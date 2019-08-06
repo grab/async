@@ -22,7 +22,6 @@ func upload(context.Context) (interface{}, error){
 }
 
 ```
-<br />
  
 #### Fork join
 The main characteristic for Fork join task is to spawn new subtasks running concurrently. They could be different parts of the main task which can be running independently.  The following code example illustrates how you can send files to S3 concurrently with few lines of code.
@@ -37,14 +36,12 @@ func uploadFilesConcurrently(files []string) {
    ForkJoin(context.Background(), tasks)
 }
 ```
-<br />
 
 #### Invoke All
 The Fork Join may not apply to every cases imagining the number of tasks go crazy. In that case, the number of concurrently running tasks, goroutines and CPU utilisation would overwhelm the node. One solution is to constraint the maximum concurrency. InvokeAll is introduced for this purpose, it's like maintaining a fixed size of goroutine pool which attempt serve the given tasks with shortest time.
 ```
 InvokeAll(context.Background(), concurrency, tasks)
 ```
-<br />
 
 #### Spread
 Sometimes we don't really care about the concurrency but just want to make sure the tasks could be finished with certain time period. Spread function would be useful in this case by spreading the tasks evenly in given period.
