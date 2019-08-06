@@ -33,5 +33,5 @@
 // Repeat pattern - repeating a certain task at a specified interval.
 //
 // Batch pattern - batching many tasks into a single one with individual continuations.
-//
+
 package async
