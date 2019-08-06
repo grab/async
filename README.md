@@ -1,7 +1,9 @@
 # Async
 
 ## What is package async
-Package async simplifies the implementation of orchestration patterns for concurrent systems. Currently, it includes:
+Package async simplifies the implementation of orchestration patterns for concurrent systems. It is similar to Java Future or JS Promise, which makes life much easier when dealing with asynchronous operation and concurrent processing. Golang is excellent in term of parallel programming. However, dealing with goroutine and channels could be a big headache when business logic gets complicated. Wrapping them into higher-level functions brings code much better readability and developers a ease of thinking.
+                                                                                              
+Currently, this packageg includes:
 
 * Asynchronous tasks with cancellations, context propagation and state.
 * Task chaining by using continuations.
@@ -11,6 +13,23 @@ Package async simplifies the implementation of orchestration patterns for concur
 * Partition pattern - partitioning data concurrently.
 * Repeat pattern - repeating a certain task at a specified interval.
 * Batch pattern - batching many tasks into a single one with individual continuations.
+
+## Concept
+**Task** is a basic concept like Future in Java. You can create a Task with an executable function which takes in context and returns result and error.
+```
+task := NewTask(func(context.Context) (interface{}, error) {
+    // run the job
+   return res, err
+})
+```
+#### Get the result
+The function will be evaluated asynchronously. You can query whether it's completed by calling task.State(), which would be a non-blocking function. Alternative, you can wait for the response with task.Outcome(), which will block the execution until the job is done. These 2 functions are quite similar to Future.isDone() or Future.get()
+
+#### Cancelling
+There could be case that we don't care about the result anymore some time after execution. In this case, the task can be aborted by invoking task.Cancel().
+
+#### Chaining
+To have a follow-up action after the task, we can simply call ContinueWith(). This could be very useful to create a chain of processing, or like have a teardown process after the job.
 
 ## Examples
 For example, if want to upload numerous files efficiently. There are multiple strategies you can take 
