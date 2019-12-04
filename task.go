@@ -7,9 +7,12 @@ import (
 	"context"
 	"errors"
 	"sync/atomic"
+	"time"
 )
 
 var errCancelled = errors.New("context canceled")
+
+var now = time.Now
 
 // Work represents a handler to execute
 type Work func(context.Context) (interface{}, error)
@@ -33,11 +36,12 @@ type outcome struct {
 
 // Task represents a unit of work to be done
 type task struct {
-	state   int32              // This indicates whether the task is started or not
-	cancel  context.CancelFunc // The cancellation function
-	action  Work               // The work to do
-	done    chan bool          // The outcome channel
-	outcome outcome            // This is used to store the result
+	state    int32              // This indicates whether the task is started or not
+	cancel   context.CancelFunc // The cancellation function
+	action   Work               // The work to do
+	done     chan bool          // The outcome channel
+	outcome  outcome            // This is used to store the result
+	duration time.Duration      // The duration of the task, in nanoseconds
 }
 
 // Task represents a unit of work to be done
@@ -83,6 +87,11 @@ func (t *task) State() State {
 	return State(v)
 }
 
+// Duration returns the duration of the task.
+func (t *task) Duration() time.Duration {
+	return t.duration
+}
+
 // Run starts the task asynchronously.
 func (t *task) Run(ctx context.Context) Task {
 	ctx, t.cancel = context.WithCancel(ctx)
@@ -117,6 +126,7 @@ func (t *task) run(ctx context.Context) {
 	defer close(t.done)
 
 	// Execute the task
+	startedAt := now().UnixNano()
 	outcomeCh := make(chan outcome, 1)
 	go func() {
 		r, e := t.action(ctx)
@@ -128,12 +138,14 @@ func (t *task) run(ctx context.Context) {
 	// In case of the context timeout or other error, change the state of the
 	// task to cancelled and return right away.
 	case <-ctx.Done():
+		t.duration = time.Nanosecond * time.Duration(now().UnixNano()-startedAt)
 		t.outcome = outcome{err: ctx.Err()}
 		t.changeState(IsRunning, IsCancelled)
 		return
 
 	// In case where we got an outcome (happy path)
 	case o := <-outcomeCh:
+		t.duration = time.Nanosecond * time.Duration(now().UnixNano()-startedAt)
 		t.outcome = o
 		t.changeState(IsRunning, IsCompleted)
 		return

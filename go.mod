@@ -1,4 +1,4 @@
-module gitlab.myteksi.net/grab-x/async
+module github.com/grab/async
 
 go 1.12
 
