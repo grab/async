@@ -19,7 +19,9 @@ func ForkJoin(ctx context.Context, tasks []Task) Task {
 // WaitAll waits for all tasks to finish.
 func WaitAll(tasks []Task) {
 	for _, task := range tasks {
-		_, _ = task.Outcome()
+		if task != nil {
+			_, _ = task.Outcome()
+		}
 	}
 }
 
