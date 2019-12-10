@@ -18,16 +18,16 @@ func Repeat(ctx context.Context, interval time.Duration, action Work) Task {
 	}
 
 	// Invoke the task timer
-	return Invoke(ctx, func(context.Context) (interface{}, error) {
+	return Invoke(ctx, func(taskCtx context.Context) (interface{}, error) {
 		timer := time.NewTicker(interval)
 		for {
 			select {
-			case <-ctx.Done():
+			case <-taskCtx.Done():
 				timer.Stop()
 				return nil, nil
 
 			case <-timer.C:
-				_, _ = safeAction(ctx)
+				_, _ = safeAction(taskCtx)
 			}
 		}
 	})
