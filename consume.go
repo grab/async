@@ -14,7 +14,7 @@ func Consume(ctx context.Context, concurrency int, tasks chan Task) Task {
 		concurrency = runtime.NumCPU()
 	}
 
-	return Invoke(ctx, func(context.Context) (interface{}, error) {
+	return Invoke(ctx, func(taskCtx context.Context) (interface{}, error) {
 		workers := make(chan int, concurrency)
 		concurrentTasks := make([]Task, concurrency)
 		// generate worker IDs
@@ -25,17 +25,17 @@ func Consume(ctx context.Context, concurrency int, tasks chan Task) Task {
 		for {
 			select {
 			// context cancelled
-			case <-ctx.Done():
+			case <-taskCtx.Done():
 				WaitAll(concurrentTasks)
-				return nil, ctx.Err()
+				return nil, taskCtx.Err()
 
 				// worker available
 			case workerID := <-workers:
 				select {
 				// worker is waiting for job when context is cancelled
-				case <-ctx.Done():
+				case <-taskCtx.Done():
 					WaitAll(concurrentTasks)
-					return nil, ctx.Err()
+					return nil, taskCtx.Err()
 
 				case t, ok := <-tasks:
 					// if task channel is closed
@@ -44,7 +44,7 @@ func Consume(ctx context.Context, concurrency int, tasks chan Task) Task {
 						return nil, nil
 					}
 					concurrentTasks[workerID] = t
-					t.Run(ctx).ContinueWith(ctx,
+					t.Run(taskCtx).ContinueWith(taskCtx,
 						func(interface{}, error) (interface{}, error) {
 							workers <- workerID
 							return nil, nil
