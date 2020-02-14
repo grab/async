@@ -28,6 +28,8 @@ const (
 	IsCancelled              // IsCancelled represents a task which was cancelled or has timed out
 )
 
+type signal chan struct{}
+
 // Outcome of the task contains a result and an error
 type outcome struct {
 	result interface{} // The result of the work
@@ -36,12 +38,12 @@ type outcome struct {
 
 // Task represents a unit of work to be done
 type task struct {
-	state    int32              // This indicates whether the task is started or not
-	cancel   context.CancelFunc // The cancellation function
-	action   Work               // The work to do
-	done     chan bool          // The outcome channel
-	outcome  outcome            // This is used to store the result
-	duration time.Duration      // The duration of the task, in nanoseconds
+	state    int32         // This indicates whether the task is started or not
+	cancel   signal        // The cancellation channel
+	done     signal        // The outcome channel
+	action   Work          // The work to do
+	outcome  outcome       // This is used to store the result
+	duration time.Duration // The duration of the task, in nanoseconds
 }
 
 // Task represents a unit of work to be done
@@ -57,7 +59,8 @@ type Task interface {
 func NewTask(action Work) Task {
 	return &task{
 		action: action,
-		done:   make(chan bool, 1),
+		done:   make(signal, 1),
+		cancel: make(signal, 1),
 	}
 }
 
@@ -94,7 +97,6 @@ func (t *task) Duration() time.Duration {
 
 // Run starts the task asynchronously.
 func (t *task) Run(ctx context.Context) Task {
-	ctx, t.cancel = context.WithCancel(ctx)
 	go t.run(ctx)
 	return t
 }
@@ -112,7 +114,7 @@ func (t *task) Cancel() {
 
 	// Attempt to cancel the task if it's in the running state
 	if t.cancel != nil {
-		t.cancel()
+		close(t.cancel)
 	}
 }
 
@@ -134,6 +136,14 @@ func (t *task) run(ctx context.Context) {
 	}()
 
 	select {
+
+	// In case of a manual task cancellation, set the outcome and transition
+	// to the cancelled state.
+	case <-t.cancel:
+		t.duration = time.Nanosecond * time.Duration(now().UnixNano()-startedAt)
+		t.outcome = outcome{err: errCancelled}
+		t.changeState(IsRunning, IsCancelled)
+		return
 
 	// In case of the context timeout or other error, change the state of the
 	// task to cancelled and return right away.
