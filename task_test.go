@@ -116,3 +116,19 @@ func TestTaskCancelRunning(t *testing.T) {
 	_, err := task.Outcome()
 	assert.Equal(t, errCancelled, err)
 }
+
+func TestTaskCancelTwice(t *testing.T) {
+	task := Invoke(context.Background(), func(context.Context) (interface{}, error) {
+		time.Sleep(500 * time.Millisecond)
+		return 1, nil
+	})
+
+	assert.NotPanics(t, func() {
+		for i := 0; i < 100; i++ {
+			task.Cancel()
+		}
+	})
+
+	_, err := task.Outcome()
+	assert.Equal(t, errCancelled, err)
+}
