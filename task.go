@@ -114,7 +114,12 @@ func (t *task) Cancel() {
 
 	// Attempt to cancel the task if it's in the running state
 	if t.cancel != nil {
-		close(t.cancel)
+		select {
+		case <-t.cancel:
+			return
+		default:
+			close(t.cancel)
+		}
 	}
 }
 
