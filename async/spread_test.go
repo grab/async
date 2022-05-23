@@ -1,4 +1,4 @@
-// Copyright 2019 Grabtaxi Holdings PTE LTE (GRAB), All rights reserved.
+// Copyright (c) 2022 James Tran Dung, All rights reserved.
 // Use of this source code is governed by an MIT-style license that can be found in the LICENSE file
 
 package async
@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func newTasks() []Task {
-	work := func(context.Context) (interface{}, error) {
+func newTasks() []Task[int] {
+	work := func(context.Context) (int, error) {
 		return 1, nil
 	}
 
@@ -25,8 +25,9 @@ func TestThrottle(t *testing.T) {
 
 	// Throttle and calculate the duration
 	t0 := time.Now()
-	task := Throttle(context.Background(), tasks, 3, 50*time.Millisecond)
-	_, _ = task.Outcome() // Wait
+
+	throttledTask := Throttle(context.Background(), tasks, 3, 50*time.Millisecond)
+	throttledTask.Wait()
 
 	// Make sure we completed within duration
 	dt := int(time.Now().Sub(t0).Seconds() * 1000)
@@ -42,9 +43,10 @@ func TestThrottle_Cancel(t *testing.T) {
 	// Throttle and calculate the duration
 	Throttle(ctx, tasks, 3, 50*time.Millisecond)
 	WaitAll(tasks)
+
 	cancelled := 0
-	for _, task := range tasks {
-		if task.State() == IsCancelled {
+	for _, t := range tasks {
+		if t.State() == IsCancelled {
 			cancelled++
 		}
 	}
@@ -58,8 +60,9 @@ func TestSpread(t *testing.T) {
 
 	// Spread and calculate the duration
 	t0 := time.Now()
-	task := Spread(context.Background(), within, tasks)
-	_, _ = task.Outcome() // Wait
+
+	spreadTask := Spread(context.Background(), tasks, within)
+	spreadTask.Wait()
 
 	// Make sure we completed within duration
 	dt := int(time.Now().Sub(t0).Seconds() * 1000)
@@ -68,7 +71,7 @@ func TestSpread(t *testing.T) {
 	// Make sure all tasks are done
 	for _, task := range tasks {
 		v, _ := task.Outcome()
-		assert.Equal(t, 1, v.(int))
+		assert.Equal(t, 1, v)
 	}
 }
 
@@ -77,8 +80,8 @@ func ExampleSpread() {
 	within := 200 * time.Millisecond
 
 	// Spread
-	task := Spread(context.Background(), within, tasks)
-	_, _ = task.Outcome() // Wait
+	task := Spread(context.Background(), tasks, within)
+	task.Wait()
 
 	// Make sure all tasks are done
 	for _, task := range tasks {
@@ -92,5 +95,4 @@ func ExampleSpread() {
 	// 1
 	// 1
 	// 1
-
 }
