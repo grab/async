@@ -8,7 +8,7 @@ import (
 	"sync"
 )
 
-type batchEntry[P any, T any] struct {
+type batchEntry[P any] struct {
 	id      uint64
 	payload P // Will be used as input when the batch is processed
 }
@@ -16,11 +16,11 @@ type batchEntry[P any, T any] struct {
 type batch[P any, T any] struct {
 	sync.RWMutex
 	ctx           context.Context
-	lastID        uint64                  // The last id for result matching
-	pending       []batchEntry[P, T]      // The task queue to be executed in one batch
-	batchExecutor Task[map[uint64]T]      // The current batch executor
-	batch         chan []batchEntry[P, T] // The channel to submit a batch to be processed by the above executor
-	processFn     func([]P) []T           // The func which will be executed to process one batch of tasks
+	lastID        uint64               // The last id for result matching
+	pending       []batchEntry[P]      // The task queue to be executed in one batch
+	batchExecutor Task[map[uint64]T]   // The current batch executor
+	batch         chan []batchEntry[P] // The channel to submit a batch to be processed by the above executor
+	processFn     func([]P) []T        // The func which will be executed to process one batch of tasks
 }
 
 // Batch represents a batch where tasks can be appended and processed in one go.
@@ -34,8 +34,8 @@ type Batch[P any, T any] interface {
 func NewBatch[P any, T any](ctx context.Context, processFn func([]P) []T) Batch[P, T] {
 	return &batch[P, T]{
 		ctx:       ctx,
-		pending:   []batchEntry[P, T]{},
-		batch:     make(chan []batchEntry[P, T]),
+		pending:   []batchEntry[P]{},
+		batch:     make(chan []batchEntry[P]),
 		processFn: processFn,
 	}
 }
@@ -63,7 +63,7 @@ func (b *batch[P, T]) Append(payload P) Task[T] {
 
 	// Add to the task queue
 	b.pending = append(
-		b.pending, batchEntry[P, T]{
+		b.pending, batchEntry[P]{
 			id:      id,
 			payload: payload,
 		},
@@ -84,7 +84,7 @@ func (b *batch[P, T]) Reduce() {
 
 	// Capture pending tasks and reset the queue
 	pendingBatch := b.pending
-	b.pending = []batchEntry[P, T]{}
+	b.pending = []batchEntry[P]{}
 
 	// Run the current batch using the existing executor
 	b.batch <- pendingBatch

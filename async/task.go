@@ -78,7 +78,7 @@ type task[T any] struct {
 	duration time.Duration // The duration of this task, in nanoseconds
 }
 
-// NewTask creates a new task.
+// NewTask creates a new Task.
 func NewTask[T any](action Work[T]) Task[T] {
 	return &task[T]{
 		action: action,
@@ -87,12 +87,34 @@ func NewTask[T any](action Work[T]) Task[T] {
 	}
 }
 
-// NewTasks creates a group of new tasks.
+// NewTasks creates a group of new Task.
 func NewTasks[T any](actions ...Work[T]) []Task[T] {
 	tasks := make([]Task[T], 0, len(actions))
 
 	for _, action := range actions {
 		tasks = append(tasks, NewTask(action))
+	}
+
+	return tasks
+}
+
+// NewSilentTask creates a new SilentTask.
+func NewSilentTask(action SilentWork) SilentTask {
+	return &task[struct{}]{
+		action: func(taskCtx context.Context) (struct{}, error) {
+			return struct{}{}, action(taskCtx)
+		},
+		done:   make(signal, 1),
+		cancel: make(signal, 1),
+	}
+}
+
+// NewSilentTasks creates a group of new SilentTask.
+func NewSilentTasks(actions ...SilentWork) []SilentTask {
+	tasks := make([]SilentTask, 0, len(actions))
+
+	for _, action := range actions {
+		tasks = append(tasks, NewSilentTask(action))
 	}
 
 	return tasks

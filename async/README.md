@@ -1,71 +1,138 @@
 # Async
 
-## What is package async
-Package async simplifies the implementation of orchestration patterns for concurrent systems. It is similar to Java Future or JS Promise, which makes life much easier when dealing with asynchronous operation and concurrent processing. Golang is excellent in term of parallel programming. However, dealing with goroutine and channels could be a big headache when business logic gets complicated. Wrapping them into higher-level functions brings code much better readability and developers a ease of thinking.
+## Why you should consider this package
+Package `async` simplifies the implementation of orchestration patterns for concurrent systems. It is similar to 
+Java Future or JS Promise, which makes life much easier when dealing with asynchronous operation and concurrent 
+processing. Golang is excellent in terms of parallel programming. However, dealing with Go routines and channels 
+could be a big headache when business logic gets complicated. Wrapping them into higher-level functions improves
+code readability significantly and makes it easier for engineers to reason about the system's behaviours.
                                                                                               
-Currently, this packageg includes:
+Currently, this package includes:
 
 * Asynchronous tasks with cancellations, context propagation and state.
 * Task chaining by using continuations.
-* Fork/join pattern - running a bunch of work and waiting for everything to finish.
-* Throttling pattern - throttling task execution on a specified rate.
-* Spread pattern - spreading tasks across time.
-* Partition pattern - partitioning data concurrently.
-* Repeat pattern - repeating a certain task at a specified interval.
-* Batch pattern - batching many tasks into a single one with individual continuations.
+* Fork/join pattern - running a batch of tasks in parallel and blocking until all finish.
+* Concurrency cap - running a batch of tasks concurrently with a cap on max concurrency level.
+* Throttling pattern - throttling task execution at a specified rate.
+* Spread pattern - spreading tasks within a specified duration.
+* Repeat pattern - repeating a task on a pre-determined interval.
+* Batch pattern - batching many tasks to be processed together with individual continuations.
+* Partition pattern - dividing data into partitions concurrently.
 
 ## Concept
-**Task** is a basic concept like Future in Java. You can create a Task with an executable function which takes in context and returns result and error.
-```
-task := NewTask(func(context.Context) (interface{}, error) {
+**Task** is a basic concept like `Future` in Java. You can create a `Task` using an executable function which takes 
+in `context.Context`, then returns error and an optional result.
+
+```go
+task := NewTask(func(context.Context) (animal, error) {
     // run the job
-   return res, err
+    return res, err
+})
+
+silentTask := NewSilentTask(func(context.Context) error {
+    // run the job
+    return err
 })
 ```
-#### Get the result
-The function will be evaluated asynchronously. You can query whether it's completed by calling task.State(), which would be a non-blocking function. Alternative, you can wait for the response with task.Outcome(), which will block the execution until the job is done. These 2 functions are quite similar to Future.isDone() or Future.get()
 
-#### Cancelling
-There could be case that we don't care about the result anymore some time after execution. In this case, the task can be aborted by invoking task.Cancel().
+### Get the result
+The function will be executed asynchronously. You can query whether it's completed by calling `task.State()`, which 
+is a non-blocking function. Alternative, you can wait for the response using `task.Outcome()` or `silentTask.Wait()`, 
+which will block the execution until the task is done. These functions are quite similar to the equivalents in Java
+`Future.isDone()` or `Future.get()`
 
-#### Chaining
-To have a follow-up action after the task, we can simply call ContinueWith(). This could be very useful to create a chain of processing, or like have a teardown process after the job.
+### Cancelling
+There could be case that we don't care about the result anymore some time after execution. In this case, a task can 
+be aborted by invoking `task.Cancel()`.
 
-## Examples
-For example, if want to upload numerous files efficiently. There are multiple strategies you can take 
-Given file uploading function like:
-```
-func upload(context.Context) (interface{}, error){
-    // do file uploading 
-    return res, err
-}
+### Chaining
+To have a follow-up action after a task is done, you can use the provided family of `Continue` functions. This could 
+be very useful to create a chain of processing, or to have a teardown process at the end of a task.
 
-```
+## Features
  
-#### Fork join
-The main characteristic for Fork join task is to spawn new subtasks running concurrently. They could be different parts of the main task which can be running independently.  The following code example illustrates how you can send files to S3 concurrently with few lines of code.
+### Fork join
+`ForkJoin` is meant for running multiple subtasks concurrently. They could be different parts of the main task which 
+can be executed independently. The following code example illustrates how you can send files to S3 concurrently with 
+a few lines of code.
 
-
-```
+```go
 func uploadFilesConcurrently(files []string) {
-	tasks := []Tasks{}
-		for _, file := files {
-		tasks = append(tasks, NewTask(upload(file)))
-	}
-   ForkJoin(context.Background(), tasks)
+    var tasks []Task[string]
+    for _, file := range files {
+        f := file
+        
+        tasks = append(tasks, NewTask(func(ctx context.Context) (string, error) {
+            return upload(ctx, f)
+        }))
+    }
+
+    ForkJoin(context.Background(), tasks)
+}
+
+func upload(ctx context.Context, file string) (string, error){
+    // do file uploading
+    return "", nil
 }
 ```
 
-#### Invoke All
-The Fork Join may not apply to every cases imagining the number of tasks go crazy. In that case, the number of concurrently running tasks, goroutines and CPU utilisation would overwhelm the node. One solution is to constraint the maximum concurrency. InvokeAll is introduced for this purpose, it's like maintaining a fixed size of goroutine pool which attempt serve the given tasks with shortest time.
-```
-InvokeAll(context.Background(), concurrency, tasks)
+### Concurrency cap
+`ForkJoin` is not suitable when the number of tasks is huge. In this scenario, the number of concurrent Go routines
+would likely overwhelm a node and consume too much CPU resources. One solution is to put a cap on the max concurrency
+level. `RunWithConcurrencyLevelC` and `RunWithConcurrencyLevelS` were created for this purpose. Internally, it's like 
+maintaining a fixed-size worker pool which aims to execute the given tasks as quickly as possible without violating 
+the given constraint.
+
+```go
+// RunWithConcurrencyLevelC runs the given tasks up to the max concurrency level.
+func RunWithConcurrencyLevelC[T SilentTask](ctx context.Context, concurrencyLevel int, tasks <-chan T) SilentTask
+
+// RunWithConcurrencyLevelS runs the given tasks up to the max concurrency level.
+func RunWithConcurrencyLevelS[T SilentTask](ctx context.Context, concurrencyLevel int, tasks []T) SilentTask
 ```
 
-#### Spread
-Sometimes we don't really care about the concurrency but just want to make sure the tasks could be finished with certain time period. Spread function would be useful in this case by spreading the tasks evenly in given period.
-```
-Spread(context.Background(), period, tasks)
-```
-For example, if we want to send 50 files within 10 seconds, the Spread function would start to run the task every 0.2 second. An assumption made here is that every task takes similar period of time. To have more sophisticated model, we may need to have adaptive learning model to derive the task duration from characteristics or parameters of distinct tasks.
+### Throttle
+Sometimes you don't really care about the concurrency level but just want to execute the tasks at a particular rate.
+The `Throttle` function would come in handy in this case.
 
+```go
+// Throttle runs the given tasks at the specified rate.
+func Throttle[T SilentTask](ctx context.Context, tasks []T, rateLimit int, every time.Duration) SilentTask
+```
+
+For example, if you want to send 4 files every 2 seconds, the `Throttle` function will start a task every 0.5 second.
+
+### Spread
+Instead of starting all tasks at once with `ForkJoin`, you can also spread the starting points of our tasks evenly
+within a certain duration using the `Spread` function.
+
+```go
+// Spread evenly spreads the tasks within the specified duration.
+func Spread[T SilentTask](ctx context.Context, tasks []T, within time.Duration) SilentTask
+```
+
+For example, if you want to send 50 files within 10 seconds, the `Spread` function would start a task every 0.2s.
+
+### Repeat
+
+In cases where you need to repeat a background task on a pre-determined interval, `Repeat` is your friend. The 
+returned `SilentTask` can then be used to cancel the repeating task at any time.
+
+```go
+// Repeat executes the given SilentWork asynchronously on a pre-determined interval.
+func Repeat(ctx context.Context, interval time.Duration, action SilentWork) SilentTask
+```
+
+### Batch
+
+Instead of executing a task immediately whenever you receive an input, sometimes, it might be more efficient to
+create a batch of inputs and process all in one go.
+
+See `batch_test.go` for a detailed example of how to use the `Batch` feature.
+
+### Partition
+
+When you receive a lot of data concurrently, it might be useful to divide the data into separate partitions before
+consuming.  
+
+See `partition_test.go` for a detailed example of how to use the `Partition` feature.
