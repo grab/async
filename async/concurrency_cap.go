@@ -91,7 +91,7 @@ func RunWithConcurrencyLevelS[T SilentTask](ctx context.Context, concurrencyLeve
 				select {
 				case <-taskCtx.Done():
 					CancelAll(tasks[i:])
-					return errCancelled
+					return taskCtx.Err()
 				case sem <- struct{}{}:
 					// Return the worker to the common pool
 					ContinueInSilence(

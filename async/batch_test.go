@@ -18,27 +18,27 @@ func TestBatch(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(taskCount)
 
-	// Reducer that multiplies items by 10 at once
-	b := NewBatch(
-		context.Background(), func(input []int) []int {
-			result := make([]int, len(input))
-			for i, number := range input {
-				result[i] = number * 10
+	out := make(chan int, 10)
+
+	// Processor that multiplies items by 10 all at once
+	b := NewBatcher(
+		func(input []int) error {
+			for _, number := range input {
+				out <- number * 10
 			}
 
-			return result
+			return nil
 		},
 	)
 
 	for i := 0; i < taskCount; i++ {
 		number := i
 
-		ContinueWithNoResult(
-			context.Background(), b.Append(number), func(_ context.Context, result int, err error) error {
+		ContinueInSilence(
+			context.Background(), b.Append(number), func(_ context.Context, err error) error {
 				defer wg.Done()
 
-				assert.Equal(t, result, number*10)
-				assert.NoError(t, err)
+				assert.Nil(t, err)
 
 				return nil
 			},
@@ -47,39 +47,44 @@ func TestBatch(t *testing.T) {
 
 	assert.Equal(t, 10, b.Size())
 
-	b.Reduce()
+	b.Process()
 
 	wg.Wait()
+	close(out)
+
+	for i := 0; i < taskCount; i++ {
+		assert.Equal(t, i*10, <-out)
+	}
 }
 
 func ExampleBatch() {
 	var wg sync.WaitGroup
 	wg.Add(2)
 
-	b := NewBatch(
-		context.Background(), func(input []int) []int {
+	b := NewBatcher(
+		func(input []int) error {
 			fmt.Println(input)
-			return input
+			return nil
 		},
 	)
 
-	ContinueWithNoResult(
-		context.Background(), b.Append(1), func(_ context.Context, result int, err error) error {
+	ContinueInSilence(
+		context.Background(), b.Append(1), func(_ context.Context, err error) error {
 			wg.Done()
 
 			return nil
 		},
 	)
 
-	ContinueWithNoResult(
-		context.Background(), b.Append(2), func(_ context.Context, result int, err error) error {
+	ContinueInSilence(
+		context.Background(), b.Append(2), func(_ context.Context, err error) error {
 			wg.Done()
 
 			return nil
 		},
 	)
 
-	b.Reduce()
+	b.Process()
 
 	wg.Wait()
 

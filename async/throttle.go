@@ -17,7 +17,7 @@ func Throttle[T SilentTask](ctx context.Context, tasks []T, rateLimit int, every
 				select {
 				case <-taskCtx.Done():
 					CancelAll(tasks[i:])
-					return errCancelled
+					return taskCtx.Err()
 				default:
 					if err := limiter.Wait(taskCtx); err == nil {
 						t.Execute(taskCtx)

@@ -18,7 +18,7 @@ func Spread[T SilentTask](ctx context.Context, tasks []T, within time.Duration) 
 				select {
 				case <-taskCtx.Done():
 					CancelAll(tasks[i:])
-					return errCancelled
+					return taskCtx.Err()
 				default:
 					t.Execute(taskCtx)
 					time.Sleep(sleep)

@@ -100,25 +100,55 @@ func TestProcessTaskPool_SadPath(t *testing.T) {
 	for _, test := range tests {
 		m := test
 
-		taskChan := make(chan Task[struct{}])
+		taskChan := make(chan SilentTask)
 		ctx, _ := context.WithTimeout(context.Background(), m.timeOut*time.Millisecond)
 
 		go func() {
 			for i := 0; i < m.taskCount; i++ {
-				taskChan <- NewTask(
-					func(context.Context) (struct{}, error) {
+				taskChan <- NewSilentTask(
+					func(context.Context) error {
 						time.Sleep(time.Millisecond * 10)
 
-						return struct{}{}, nil
+						return nil
 					},
 				)
 			}
 		}()
 
-		p := RunWithConcurrencyLevelC(ctx, m.concurrency, taskChan)
-		err := p.Error()
+		st := RunWithConcurrencyLevelC(ctx, m.concurrency, taskChan)
+		err := st.Error()
 
 		assert.NotNil(t, err, m.desc)
+	}
+}
+
+func TestRunWithConcurrencyLevelC_VerifyTaskDrainingOnCancel(t *testing.T) {
+	taskChan := make(chan SilentTask, 6)
+	tasks := make([]SilentTask, 6)
+
+	for i := 0; i < 6; i++ {
+		tasks[i] = NewSilentTask(
+			func(context.Context) error {
+				time.Sleep(time.Millisecond * 50)
+
+				return nil
+			},
+		)
+
+		taskChan <- tasks[i]
+	}
+
+	ctxWithCancel, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	RunWithConcurrencyLevelC(ctxWithCancel, 2, taskChan)
+
+	// Pause to wait for draining to complete
+	time.Sleep(time.Millisecond * 50)
+
+	// Remaining tasks should be cancelled
+	for i := 0; i < 6; i++ {
+		assert.Equal(t, IsCancelled, tasks[i].State())
 	}
 }
 
@@ -151,7 +181,38 @@ func TestRunWithConcurrencyLevelS(t *testing.T) {
 	assert.Equal(t, []int{0, 0, 1, 1, 2, 2}, res)
 }
 
-func TestRunWithConcurrencyLevelSWithZeroConcurrency(t *testing.T) {
+func TestTestRunWithConcurrencyLevelS_WithCancellingHalfway(t *testing.T) {
+	tasks := make([]SilentTask, 6)
+
+	for i := range tasks {
+		j := i
+
+		tasks[j] = NewSilentTask(
+			func(context.Context) error {
+				time.Sleep(time.Millisecond * 10)
+
+				return nil
+			},
+		)
+	}
+
+	ctxWithCancel, cancel := context.WithCancel(context.Background())
+
+	RunWithConcurrencyLevelS(ctxWithCancel, 2, tasks)
+
+	// Sleep and cancel right after first 2 tasks complete
+	time.Sleep(time.Millisecond * 15)
+	cancel()
+
+	WaitAll(tasks)
+
+	// Remaining tasks should be cancelled
+	for i := 2; i < 6; i++ {
+		assert.Equal(t, IsCancelled, tasks[i].State())
+	}
+}
+
+func TestRunWithConcurrencyLevelS_WithZeroConcurrency(t *testing.T) {
 	resChan := make(chan int, 6)
 	works := make([]Work[struct{}], 6)
 

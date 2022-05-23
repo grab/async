@@ -5,7 +5,13 @@ package async
 
 import (
 	"context"
+	"errors"
 	"sync"
+)
+
+var (
+	ErrBatchChannelClosed      = errors.New("input batch channel was closed")
+	ErrBatchProcessorNotActive = errors.New("batch processor has already shut down")
 )
 
 type batchEntry[P any] struct {
@@ -13,38 +19,48 @@ type batchEntry[P any] struct {
 	payload P // Will be used as input when the batch is processed
 }
 
-type batch[P any, T any] struct {
+type batcher[P any] struct {
 	sync.RWMutex
-	ctx           context.Context
+	isActive      bool
 	lastID        uint64               // The last id for result matching
 	pending       []batchEntry[P]      // The task queue to be executed in one batch
-	batchExecutor Task[map[uint64]T]   // The current batch executor
+	batchExecutor SilentTask           // The current batch executor
 	batch         chan []batchEntry[P] // The channel to submit a batch to be processed by the above executor
-	processFn     func([]P) []T        // The func which will be executed to process one batch of tasks
+	processFn     func([]P) error      // The func which will be executed to process one batch of tasks
 }
 
-// Batch represents a batch where tasks can be appended and processed in one go.
-type Batch[P any, T any] interface {
-	Append(payload P) Task[T]
+// Batcher represents a batch processor that can accumulate tasks and execute all in one go.
+// This implementation is suitable for sitting in the back and
+type Batcher[P any] interface {
+	// Append adds a new payload to the batch and returns a task for that particular payload.
+	// Clients can block and wait for the returned task to complete before extracting result.
+	Append(payload P) SilentTask
+	// Size returns the length of the pending queue.
 	Size() int
-	Reduce()
+	// Process executes all pending tasks in one go.
+	Process()
+	// Shutdown notifies this batch processor to complete its work gracefully. Future calls
+	// to Append will return an error immediately and Process will be a no-op.
+	Shutdown()
 }
 
-// NewBatch creates a new batch
-func NewBatch[P any, T any](ctx context.Context, processFn func([]P) []T) Batch[P, T] {
-	return &batch[P, T]{
-		ctx:       ctx,
+// NewBatcher returns a new Batcher
+func NewBatcher[P any](processFn func([]P) error) Batcher[P] {
+	return &batcher[P]{
+		isActive:  true,
 		pending:   []batchEntry[P]{},
 		batch:     make(chan []batchEntry[P]),
 		processFn: processFn,
 	}
 }
 
-// Append adds a new payload to the batch and returns the task for that particular payload.
-// You should listen for the outcome, as the task will be executed by the reducer.
-func (b *batch[P, T]) Append(payload P) Task[T] {
+func (b *batcher[P]) Append(payload P) SilentTask {
 	b.Lock()
 	defer b.Unlock()
+
+	if !b.isActive {
+		return Completed(struct{}{}, ErrBatchProcessorNotActive)
+	}
 
 	b.lastID = b.lastID + 1
 	id := b.lastID
@@ -55,9 +71,9 @@ func (b *batch[P, T]) Append(payload P) Task[T] {
 	}
 
 	// Extract result from the processed batch
-	t := ContinueWith(
-		b.ctx, b.batchExecutor, func(_ context.Context, batchResult map[uint64]T, _ error) (T, error) {
-			return batchResult[id], nil
+	t := ContinueInSilence(
+		context.Background(), b.batchExecutor, func(_ context.Context, err error) error {
+			return err
 		},
 	)
 
@@ -72,13 +88,20 @@ func (b *batch[P, T]) Append(payload P) Task[T] {
 	return t
 }
 
-// Reduce executes all pending tasks in one batch.
-func (b *batch[P, T]) Reduce() {
+func (b *batcher[P]) Process() {
 	b.Lock()
 	defer b.Unlock()
 
+	b.doProcess(false)
+}
+
+func (b *batcher[P]) doProcess(isShuttingDown bool) {
 	// Skip if the queue is empty
 	if len(b.pending) == 0 {
+		if isShuttingDown {
+			close(b.batch)
+		}
+
 		return
 	}
 
@@ -90,40 +113,44 @@ func (b *batch[P, T]) Reduce() {
 	b.batch <- pendingBatch
 
 	// Prepare a new executor
-	b.batchExecutor = b.createBatchExecutor()
+	if !isShuttingDown {
+		b.batchExecutor = b.createBatchExecutor()
+	}
 }
 
-// Size returns the length of the pending queue.
-func (b *batch[P, T]) Size() int {
+func (b *batcher[P]) Size() int {
 	b.RLock()
 	defer b.RUnlock()
 
 	return len(b.pending)
 }
 
+func (b *batcher[P]) Shutdown() {
+	b.Lock()
+	defer b.Unlock()
+
+	b.doProcess(true)
+
+	b.isActive = false
+}
+
 // createBatchExecutor creates an executor for one batch of tasks.
-func (b *batch[P, T]) createBatchExecutor() Task[map[uint64]T] {
-	return Invoke(
-		b.ctx, func(context.Context) (map[uint64]T, error) {
+func (b *batcher[P]) createBatchExecutor() SilentTask {
+	return InvokeInSilence(
+		context.Background(), func(context.Context) error {
 			// Block here until a batch is submitted to be processed
-			pendingBatch := <-b.batch
+			pendingBatch, ok := <-b.batch
+			if !ok {
+				return ErrBatchChannelClosed
+			}
 
-			m := make(map[uint64]T)
-
-			// Prepare the input for the batch reduce call
+			// Prepare the input for the batch process call
 			input := make([]P, len(pendingBatch))
 			for i, b := range pendingBatch {
 				input[i] = b.payload
 			}
 
-			// Process the input
-			result := b.processFn(input)
-			for i, res := range result {
-				id := pendingBatch[i].id
-				m[id] = res
-			}
-
-			return m, nil
+			return b.processFn(input)
 		},
 	)
 }

@@ -41,6 +41,26 @@ func TestSpread(t *testing.T) {
 	}
 }
 
+func TestSpread_Cancel(t *testing.T) {
+	tasks := newTasks()
+	within := 200 * time.Millisecond
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	Spread(ctx, tasks, within)
+	WaitAll(tasks)
+
+	cancelled := 0
+	for _, t := range tasks {
+		if t.State() == IsCancelled {
+			cancelled++
+		}
+	}
+
+	assert.Equal(t, 5, cancelled)
+}
+
 func ExampleSpread() {
 	tasks := newTasks()
 	within := 200 * time.Millisecond

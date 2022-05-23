@@ -12,7 +12,8 @@ import (
 	"time"
 )
 
-var errCancelled = errors.New("context canceled")
+// ErrCancelled is returned when a task gets cancelled.
+var ErrCancelled = errors.New("task canceled")
 
 var now = time.Now
 
@@ -76,6 +77,22 @@ type task[T any] struct {
 	action   Work[T]       // The work to do
 	outcome  outcome[T]    // This is used to store the outcome of this task
 	duration time.Duration // The duration of this task, in nanoseconds
+}
+
+// Completed returns a completed task with the given result and error.
+func Completed[T any](result T, err error) Task[T] {
+	done := make(signal)
+	close(done)
+
+	return &task[T]{
+		state: int32(IsCompleted),
+		done:  done,
+		outcome: outcome[T]{
+			result: result,
+			err:    err,
+		},
+		duration: time.Duration(0),
+	}
 }
 
 // NewTask creates a new Task.
@@ -215,7 +232,7 @@ func (t *task[T]) Cancel() {
 	// If the task was created but never started, transition directly to cancelled state
 	// and close the done channel and set the error.
 	if t.changeState(IsCreated, IsCancelled) {
-		t.outcome = outcome[T]{err: errCancelled}
+		t.outcome = outcome[T]{err: ErrCancelled}
 		close(t.done)
 		return
 	}
@@ -259,7 +276,7 @@ func (t *task[T]) doRun(ctx context.Context) {
 	// to the cancelled state.
 	case <-t.cancel:
 		t.duration = time.Nanosecond * time.Duration(now().UnixNano()-startedAt)
-		t.outcome = outcome[T]{err: errCancelled}
+		t.outcome = outcome[T]{err: ErrCancelled}
 		t.changeState(IsRunning, IsCancelled)
 		return
 

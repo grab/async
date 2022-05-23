@@ -12,6 +12,15 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestCompleted(t *testing.T) {
+	task := Completed(1, assert.AnError)
+
+	v, err := task.Outcome()
+	assert.Equal(t, 1, v)
+	assert.Equal(t, assert.AnError, err)
+	assert.Equal(t, IsCompleted, task.State())
+}
+
 func TestNewTasks(t *testing.T) {
 	work := func(context.Context) (interface{}, error) {
 		return 1, nil
@@ -207,7 +216,7 @@ func TestTaskCancelStarted(t *testing.T) {
 	task.Cancel()
 
 	_, err := task.Outcome()
-	assert.Equal(t, errCancelled, err)
+	assert.Equal(t, ErrCancelled, err)
 }
 
 func TestTaskCancelRunning(t *testing.T) {
@@ -223,7 +232,7 @@ func TestTaskCancelRunning(t *testing.T) {
 	task.Cancel()
 
 	_, err := task.Outcome()
-	assert.Equal(t, errCancelled, err)
+	assert.Equal(t, ErrCancelled, err)
 }
 
 func TestTaskCancelTwice(t *testing.T) {
@@ -243,5 +252,5 @@ func TestTaskCancelTwice(t *testing.T) {
 	)
 
 	_, err := task.Outcome()
-	assert.Equal(t, errCancelled, err)
+	assert.Equal(t, ErrCancelled, err)
 }
