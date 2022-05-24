@@ -147,8 +147,8 @@ func (b *batcher[P]) Shutdown() {
 	defer b.Unlock()
 
 	ctx := context.Background()
-	if b.shutdownDuration > 0 {
-		ctxWithTimeout, cancel := context.WithTimeout(ctx, b.shutdownDuration)
+	if b.shutdownGraceDuration > 0 {
+		ctxWithTimeout, cancel := context.WithTimeout(ctx, b.shutdownGraceDuration)
 		defer cancel()
 
 		ctx = ctxWithTimeout

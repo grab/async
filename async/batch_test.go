@@ -198,7 +198,7 @@ func TestBatcher_ShutdownWithTimeout(t *testing.T) {
 
 			return nil
 		},
-		WithShutdownDuration(50*time.Millisecond),
+		WithShutdownGraceDuration(50*time.Millisecond),
 	)
 
 	tasks := make([]SilentTask, taskCount)

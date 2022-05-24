@@ -3,9 +3,9 @@ package async
 import "time"
 
 type batcherConfigs struct {
-	autoProcessSize     int
-	autoProcessInterval time.Duration
-	shutdownDuration    time.Duration
+	autoProcessSize       int
+	autoProcessInterval   time.Duration
+	shutdownGraceDuration time.Duration
 }
 
 type BatcherOption func(*batcherConfigs)
@@ -31,11 +31,11 @@ func WithAutoProcessInterval(autoProcessIntervalInMilliseconds time.Duration) Ba
 	}
 }
 
-// WithShutdownDuration specifies how long Batcher will wait for the shutdown operation
-// to complete before returning. If `shutdownDurationInMilliseconds <= 0`, Batcher will
-// block and wait until the shutdown operation fully completes.
-func WithShutdownDuration(shutdownDurationInMilliseconds time.Duration) BatcherOption {
+// WithShutdownGraceDuration specifies how long Batcher will wait for the Shutdown operation
+// to complete before returning. If `shutdownDurationInMilliseconds <= 0`, Batcher will block
+// and wait until the shutdown operation fully completes.
+func WithShutdownGraceDuration(shutdownDurationInMilliseconds time.Duration) BatcherOption {
 	return func(configs *batcherConfigs) {
-		configs.shutdownDuration = shutdownDurationInMilliseconds
+		configs.shutdownGraceDuration = shutdownDurationInMilliseconds
 	}
 }
