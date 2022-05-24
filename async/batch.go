@@ -7,10 +7,10 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
 )
 
 var (
-	ErrBatchChannelClosed      = errors.New("input batch channel was closed")
 	ErrBatchProcessorNotActive = errors.New("batch processor has already shut down")
 )
 
@@ -21,16 +21,17 @@ type batchEntry[P any] struct {
 
 type batcher[P any] struct {
 	sync.RWMutex
+	*batcherConfigs
 	isActive      bool
-	lastID        uint64               // The last id for result matching
+	batchID       uint64               // The current batch ID
 	pending       []batchEntry[P]      // The task queue to be executed in one batch
 	batchExecutor SilentTask           // The current batch executor
 	batch         chan []batchEntry[P] // The channel to submit a batch to be processed by the above executor
 	processFn     func([]P) error      // The func which will be executed to process one batch of tasks
 }
 
-// Batcher represents a batch processor that can accumulate tasks and execute all in one go.
-// This implementation is suitable for sitting in the back and
+// Batcher is a batch processor which is suitable for sitting in the back to accumulate tasks
+// and then execute all in one go.
 type Batcher[P any] interface {
 	// Append adds a new payload to the batch and returns a task for that particular payload.
 	// Clients can block and wait for the returned task to complete before extracting result.
@@ -38,20 +39,57 @@ type Batcher[P any] interface {
 	// Size returns the length of the pending queue.
 	Size() int
 	// Process executes all pending tasks in one go.
-	Process()
+	Process(ctx context.Context)
 	// Shutdown notifies this batch processor to complete its work gracefully. Future calls
-	// to Append will return an error immediately and Process will be a no-op.
+	// to Append will return an error immediately and Process will be a no-op. This is a
+	// blocking call which will wait up to the configured amount of time for the last batch
+	// to complete.
 	Shutdown()
 }
 
 // NewBatcher returns a new Batcher
-func NewBatcher[P any](processFn func([]P) error) Batcher[P] {
-	return &batcher[P]{
-		isActive:  true,
-		pending:   []batchEntry[P]{},
-		batch:     make(chan []batchEntry[P]),
-		processFn: processFn,
+func NewBatcher[P any](processFn func([]P) error, options ...BatcherOption) Batcher[P] {
+	b := &batcher[P]{
+		batcherConfigs: &batcherConfigs{},
+		isActive:       true,
+		pending:        []batchEntry[P]{},
+		batch:          make(chan []batchEntry[P], 1),
+		processFn:      processFn,
 	}
+
+	for _, o := range options {
+		o(b.batcherConfigs)
+	}
+
+	if b.isPeriodicAutoProcessingConfigured() {
+		go func() {
+			for {
+				curBatchId := b.batchID
+
+				<-time.After(b.autoProcessInterval)
+
+				// Best effort to prevent timer from acquiring lock unnecessarily, no guarantee
+				if curBatchId == b.batchID {
+					func() {
+						b.Lock()
+						defer b.Unlock()
+
+						b.doProcess(context.Background(), false, curBatchId)
+					}()
+				}
+
+				if !b.isActive {
+					return
+				}
+			}
+		}()
+	}
+
+	return b
+}
+
+func (b *batcher[P]) isPeriodicAutoProcessingConfigured() bool {
+	return b.autoProcessInterval > 0
 }
 
 func (b *batcher[P]) Append(payload P) SilentTask {
@@ -61,9 +99,6 @@ func (b *batcher[P]) Append(payload P) SilentTask {
 	if !b.isActive {
 		return Completed(struct{}{}, ErrBatchProcessorNotActive)
 	}
-
-	b.lastID = b.lastID + 1
-	id := b.lastID
 
 	// Make sure we have a batch executor
 	if b.batchExecutor == nil {
@@ -80,23 +115,55 @@ func (b *batcher[P]) Append(payload P) SilentTask {
 	// Add to the task queue
 	b.pending = append(
 		b.pending, batchEntry[P]{
-			id:      id,
 			payload: payload,
 		},
 	)
 
+	// Auto process if configured and reached the threshold
+	if b.autoProcessSize > 0 && len(b.pending) == b.autoProcessSize {
+		// Use doProcess directly as we're holding the lock
+		b.doProcess(context.Background(), false, b.batchID)
+	}
+
 	return t
 }
 
-func (b *batcher[P]) Process() {
+func (b *batcher[P]) Size() int {
+	b.RLock()
+	defer b.RUnlock()
+
+	return len(b.pending)
+}
+
+func (b *batcher[P]) Process(ctx context.Context) {
 	b.Lock()
 	defer b.Unlock()
 
-	b.doProcess(false)
+	b.doProcess(ctx, false, b.batchID)
 }
 
-func (b *batcher[P]) doProcess(isShuttingDown bool) {
-	// Skip if the queue is empty
+func (b *batcher[P]) Shutdown() {
+	b.Lock()
+	defer b.Unlock()
+
+	ctx := context.Background()
+	if b.shutdownDuration > 0 {
+		ctxWithTimeout, cancel := context.WithTimeout(ctx, b.shutdownDuration)
+		defer cancel()
+
+		ctx = ctxWithTimeout
+	}
+
+	b.doProcess(ctx, true, b.batchID)
+
+	b.isActive = false
+}
+
+func (b *batcher[P]) doProcess(ctx context.Context, isShuttingDown bool, toProcessBatchID uint64) {
+	if b.batchID != toProcessBatchID {
+		return
+	}
+
 	if len(b.pending) == 0 {
 		if isShuttingDown {
 			close(b.batch)
@@ -111,38 +178,27 @@ func (b *batcher[P]) doProcess(isShuttingDown bool) {
 
 	// Run the current batch using the existing executor
 	b.batch <- pendingBatch
+	b.batchExecutor.Execute(ctx)
+
+	// Block and wait for the last batch to complete on shutting down
+	if isShuttingDown {
+		b.batchExecutor.Wait()
+		return
+	}
 
 	// Prepare a new executor
-	if !isShuttingDown {
-		b.batchExecutor = b.createBatchExecutor()
-	}
-}
+	b.batchExecutor = b.createBatchExecutor()
 
-func (b *batcher[P]) Size() int {
-	b.RLock()
-	defer b.RUnlock()
-
-	return len(b.pending)
-}
-
-func (b *batcher[P]) Shutdown() {
-	b.Lock()
-	defer b.Unlock()
-
-	b.doProcess(true)
-
-	b.isActive = false
+	// Increment batch ID to stop the timer from processing old batch
+	b.batchID += 1
 }
 
 // createBatchExecutor creates an executor for one batch of tasks.
 func (b *batcher[P]) createBatchExecutor() SilentTask {
-	return InvokeInSilence(
-		context.Background(), func(context.Context) error {
+	return NewSilentTask(
+		func(context.Context) error {
 			// Block here until a batch is submitted to be processed
-			pendingBatch, ok := <-b.batch
-			if !ok {
-				return ErrBatchChannelClosed
-			}
+			pendingBatch := <-b.batch
 
 			// Prepare the input for the batch process call
 			input := make([]P, len(pendingBatch))

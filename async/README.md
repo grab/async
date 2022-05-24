@@ -3,7 +3,7 @@
 ## Why you should consider this package
 Package `async` simplifies the implementation of orchestration patterns for concurrent systems. It is similar to 
 Java Future or JS Promise, which makes life much easier when dealing with asynchronous operation and concurrent 
-processing. Golang is excellent in terms of parallel programming. However, dealing with Go routines and channels 
+processing. Golang is excellent in terms of parallel programming. However, dealing with goroutines and channels 
 could be a big headache when business logic gets complicated. Wrapping them into higher-level functions improves
 code readability significantly and makes it easier for engineers to reason about the system's behaviours.
                                                                                               
@@ -77,7 +77,7 @@ func upload(ctx context.Context, file string) (string, error){
 ```
 
 ### Concurrency cap
-`ForkJoin` is not suitable when the number of tasks is huge. In this scenario, the number of concurrent Go routines
+`ForkJoin` is not suitable when the number of tasks is huge. In this scenario, the number of concurrent goroutines
 would likely overwhelm a node and consume too much CPU resources. One solution is to put a cap on the max concurrency
 level. `RunWithConcurrencyLevelC` and `RunWithConcurrencyLevelS` were created for this purpose. Internally, it's like 
 maintaining a fixed-size worker pool which aims to execute the given tasks as quickly as possible without violating 
@@ -128,11 +128,49 @@ func Repeat(ctx context.Context, interval time.Duration, action SilentWork) Sile
 Instead of executing a task immediately whenever you receive an input, sometimes, it might be more efficient to
 create a batch of inputs and process all in one go.
 
-See `batch_test.go` for a detailed example of how to use the `Batch` feature.
+```go
+out := make(chan int, taskCount)
+
+processBatch := func(nums []int) error {
+    for _, number := range nums {
+        out <- number * 10
+    }
+    
+    return nil
+}
+
+// Auto process batch every 100ms
+periodicBatcher := NewBatcher(
+    processBatch,
+    WithAutoProcessInterval(100*time.Millisecond),
+)
+
+// Auto process batch when pending queue reaches 10
+sizeBatcher := NewBatcher(
+    processBatch,
+    WithAutoProcessSize(10),
+)
+
+// Auto process batch every 100ms or when pending queue reaches 10
+periodicSizeBatcher := NewBatcher(
+    processBatch,
+    WithAutoProcessInterval(100*time.Millisecond),
+    WithAutoProcessSize(10),
+)
+
+// Auto process batch when pending queue reaches 10
+manualBatcher := NewBatcher(
+    processBatch,
+)
+
+manualBatcher.Process()
+```
+
+See `batch_test.go` for more detailed examples on how to use this feature.
 
 ### Partition
 
 When you receive a lot of data concurrently, it might be useful to divide the data into separate partitions before
 consuming.  
 
-See `partition_test.go` for a detailed example of how to use the `Partition` feature.
+See `partition_test.go` for a detailed example on how to use this feature.
