@@ -40,8 +40,8 @@ func TestPartitioner(t *testing.T) {
 		{"cat", "name4"},
 	}
 
-	t1 := p.Append(input1...)
-	t2 := p.Append(input2...)
+	t1 := p.Take(input1...)
+	t2 := p.Take(input2...)
 	t1.Wait()
 	t2.Wait()
 
@@ -75,7 +75,7 @@ func TestPartitioner(t *testing.T) {
 		},
 	}
 
-	res := p.Partition()
+	res := p.Outcome()
 	assert.True(t, reflect.DeepEqual(expected1, res) || reflect.DeepEqual(expected2, res))
 }
 
@@ -97,10 +97,10 @@ func ExamplePartitioner() {
 		{"cat", "name5"},
 	}
 
-	t := p.Append(input...)
+	t := p.Take(input...)
 	t.Wait()
 
-	res := p.Partition()
+	res := p.Outcome()
 	first := res["dog"]
 	fmt.Println(first[0])
 	fmt.Println(first[1])
@@ -108,53 +108,4 @@ func ExamplePartitioner() {
 	// Output:
 	// {dog name1}
 	// {dog name4}
-}
-
-func TestQueue(t *testing.T) {
-	q := newQueue[string, string]()
-	input1 := partitionedItems[string, string]{
-		"a": []string{"val1"},
-		"b": []string{"val2"},
-	}
-
-	input2 := partitionedItems[string, string]{
-		"a": []string{"val4"},
-		"c": []string{"val5"},
-	}
-
-	expectedRes := []partitionedItems[string, string]{
-		{
-			"a": []string{"val1"},
-			"b": []string{"val2"},
-		}, {
-			"a": []string{"val4"},
-			"c": []string{"val5"},
-		},
-	}
-
-	q.Append(input1)
-	q.Append(input2)
-
-	assert.Equal(t, expectedRes, q.Flush())
-}
-
-func TestQuery_flush(t *testing.T) {
-	q := newQueue[string, string]()
-
-	// fill greater than default capacity
-	items := defaultCapacity + 10
-	for x := 0; x < items; x++ {
-		q.Append(partitionedItems[string, string]{})
-	}
-
-	assert.True(t, defaultCapacity < cap(q.queue))
-	assert.True(t, defaultCapacity < len(q.queue))
-
-	// flush
-	flushedItems := q.Flush()
-
-	// validate
-	assert.Equal(t, items, len(flushedItems))
-	assert.Equal(t, 0, len(q.queue))
-	assert.Equal(t, defaultCapacity, cap(q.queue))
 }
