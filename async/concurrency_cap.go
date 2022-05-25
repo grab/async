@@ -42,7 +42,7 @@ func RunWithConcurrencyLevelC[T SilentTask](ctx context.Context, concurrencyLeve
 				// Context cancelled
 				case <-taskCtx.Done():
 					go cancelRemainingTasks(tasks)
-					WaitAll(concurrentTasks)
+					waitForNonNilTasks(concurrentTasks)
 					return taskCtx.Err()
 
 				// Worker available
@@ -51,13 +51,13 @@ func RunWithConcurrencyLevelC[T SilentTask](ctx context.Context, concurrencyLeve
 					// Worker is waiting for job when context is cancelled
 					case <-taskCtx.Done():
 						go cancelRemainingTasks(tasks)
-						WaitAll(concurrentTasks)
+						waitForNonNilTasks(concurrentTasks)
 						return taskCtx.Err()
 
 					case t, ok := <-tasks:
 						// Task channel is closed
 						if !ok {
-							WaitAll(concurrentTasks)
+							waitForNonNilTasks(concurrentTasks)
 							return nil
 						}
 
@@ -75,6 +75,17 @@ func RunWithConcurrencyLevelC[T SilentTask](ctx context.Context, concurrencyLeve
 			}
 		},
 	)
+}
+
+func waitForNonNilTasks(tasks []SilentTask) {
+	nonNilTasks := make([]SilentTask, 0, len(tasks))
+	for _, task := range tasks {
+		if task != nil {
+			nonNilTasks = append(nonNilTasks, task)
+		}
+	}
+
+	WaitAll(nonNilTasks)
 }
 
 // RunWithConcurrencyLevelS runs the given tasks up to the max concurrency level.

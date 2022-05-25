@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestProcessTaskPool_HappyPath(t *testing.T) {
+func TestRunWithConcurrencyLevelC_HappyPath(t *testing.T) {
 	tests := []struct {
 		desc        string
 		taskCount   int
@@ -76,7 +76,7 @@ func TestProcessTaskPool_HappyPath(t *testing.T) {
 	}
 }
 
-func TestProcessTaskPool_SadPath(t *testing.T) {
+func TestRunWithConcurrencyLevelC_SadPath(t *testing.T) {
 	tests := []struct {
 		desc        string
 		taskCount   int
