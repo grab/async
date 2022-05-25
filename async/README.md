@@ -12,12 +12,13 @@ Currently, this package includes:
 * Asynchronous tasks with cancellations, context propagation and state.
 * Task chaining by using continuations.
 * Fork/join pattern - running a batch of tasks in parallel and blocking until all finish.
-* Concurrency cap - running a batch of tasks concurrently with a cap on max concurrency level.
+* Concurrency cap pattern - running a batch of tasks concurrently with a cap on max concurrency level.
 * Throttling pattern - throttling task execution at a specified rate.
 * Spread pattern - spreading tasks within a specified duration.
 * Repeat pattern - repeating a task on a pre-determined interval.
 * Batch pattern - batching many tasks to be processed together with individual continuations.
 * Partition pattern - dividing data into partitions concurrently.
+* Jitter pattern - adding a random jitter before executing a function to avoid thundering herds.
 
 ## Concept
 **Task** is a basic concept like `Future` in Java. You can create a `Task` using an executable function which takes 
@@ -197,3 +198,22 @@ res := p.Outcome()
 ```
 
 See `partition_test.go` for a detailed example on how to use this feature.
+
+### Jitter
+
+Using jitters to avoid thundering herds is a popular technique. We decided to make it simple for you.
+
+```go
+t := InvokeInSilence(
+    context.Background(), 
+    func(ctx context.Context) error {
+        DoJitter(func() {
+            fmt.Println("do something after random jitter")
+        }, 1000)
+
+        return nil
+    },
+)
+```
+
+See `jitter_test.go` for a detailed example on how to use this feature.
