@@ -15,7 +15,7 @@ type partitionedItems[K comparable, V any] map[K][]V
 // Partitioner divides items into separate partitions.
 type Partitioner[K comparable, V any] interface {
 	// Take items and divide them into separate partitions asynchronously.
-	Take(items ...V) SilentTask
+	Take(items ...V)
 	// Outcome returns items divided into separate partitions.
 	Outcome() map[K][]V
 }
@@ -26,9 +26,10 @@ type PartitionFunc[K comparable, V any] func(data V) (key K, ok bool)
 
 type partitioner[K comparable, V any] struct {
 	sync.Mutex
-	ctx         context.Context
-	partitionFn PartitionFunc[K, V]
-	partitions  emap.ConcurrentMap[K, []V]
+	ctx          context.Context
+	partitionFn  PartitionFunc[K, V]
+	partitions   emap.ConcurrentMap[K, []V]
+	pendingTasks []SilentTask
 }
 
 // NewPartitioner creates a new partitioner.
@@ -40,8 +41,11 @@ func NewPartitioner[K comparable, V any](ctx context.Context, partitionFn Partit
 	}
 }
 
-func (p *partitioner[K, V]) Take(rawItems ...V) SilentTask {
-	return InvokeInSilence(
+func (p *partitioner[K, V]) Take(rawItems ...V) {
+	p.Lock()
+	defer p.Unlock()
+
+	t := InvokeInSilence(
 		p.ctx, func(context.Context) error {
 			partitionedItems := p.divideIntoPartitions(rawItems)
 
@@ -64,6 +68,8 @@ func (p *partitioner[K, V]) Take(rawItems ...V) SilentTask {
 			return nil
 		},
 	)
+
+	p.pendingTasks = append(p.pendingTasks, t)
 }
 
 func (p *partitioner[K, V]) divideIntoPartitions(items []V) partitionedItems[K, V] {
@@ -78,8 +84,15 @@ func (p *partitioner[K, V]) divideIntoPartitions(items []V) partitionedItems[K, 
 }
 
 func (p *partitioner[K, V]) Outcome() map[K][]V {
+	p.Lock()
+	defer p.Unlock()
+
+	WaitAll(p.pendingTasks)
+
 	out := p.partitions.AsMap()
+
 	p.partitions = emap.NewConcurrentMap[K, []V]()
+	p.pendingTasks = []SilentTask{}
 
 	return out
 }

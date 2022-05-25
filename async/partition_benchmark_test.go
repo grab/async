@@ -29,10 +29,8 @@ func BenchmarkName(b *testing.B) {
 	}
 
 	for i := 0; i < b.N; i++ {
-		t1 := p.Take(input1...)
-		t2 := p.Take(input2...)
-		t1.Wait()
-		t2.Wait()
+		p.Take(input1...)
+		p.Take(input2...)
 
 		p.Outcome()
 	}

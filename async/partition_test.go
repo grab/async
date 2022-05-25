@@ -40,10 +40,8 @@ func TestPartitioner(t *testing.T) {
 		{"cat", "name4"},
 	}
 
-	t1 := p.Take(input1...)
-	t2 := p.Take(input2...)
-	t1.Wait()
-	t2.Wait()
+	p.Take(input1...)
+	p.Take(input2...)
 
 	expected1 := map[string][]animal{
 		"dog": {
@@ -80,12 +78,12 @@ func TestPartitioner(t *testing.T) {
 }
 
 func ExamplePartitioner() {
-	partitionFunc := func(data animal) (string, bool) {
-		if data.species == "" {
+	partitionFunc := func(a animal) (string, bool) {
+		if a.species == "" {
 			return "", false
 		}
 
-		return data.species, true
+		return a.species, true
 	}
 
 	p := NewPartitioner(context.Background(), partitionFunc)
@@ -97,15 +95,17 @@ func ExamplePartitioner() {
 		{"cat", "name5"},
 	}
 
-	t := p.Take(input...)
-	t.Wait()
+	p.Take(input...)
 
 	res := p.Outcome()
+	fmt.Println(res)
+
 	first := res["dog"]
 	fmt.Println(first[0])
 	fmt.Println(first[1])
 
 	// Output:
+	// map[cat:[{cat name5}] dog:[{dog name1} {dog name4}] snail:[{snail name2}]]
 	// {dog name1}
 	// {dog name4}
 }
