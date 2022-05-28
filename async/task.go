@@ -13,7 +13,7 @@ import (
 )
 
 // ErrCancelled is returned when a task gets cancelled.
-var ErrCancelled = errors.New("task canceled")
+var ErrCancelled = errors.New("task cancelled")
 
 var now = time.Now
 
@@ -253,6 +253,10 @@ func (t *task[T]) doRun(ctx context.Context) {
 		return // Prevent from running the same task twice
 	}
 
+	// When this task get cancelled, this `ctx` will get cancelled as well
+	ctxWithCancel, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	// Notify everyone of the completion/error state
 	defer close(t.done)
 
@@ -267,7 +271,7 @@ func (t *task[T]) doRun(ctx context.Context) {
 			}
 		}()
 
-		r, e := t.action(ctx)
+		r, e := t.action(ctxWithCancel)
 		outcomeCh <- outcome[T]{result: r, err: e}
 	}()
 
@@ -282,9 +286,9 @@ func (t *task[T]) doRun(ctx context.Context) {
 
 	// In case of the context timeout or other error, change the state of the
 	// task to cancelled and return right away.
-	case <-ctx.Done():
+	case <-ctxWithCancel.Done():
 		t.duration = time.Nanosecond * time.Duration(now().UnixNano()-startedAt)
-		t.outcome = outcome[T]{err: ctx.Err()}
+		t.outcome = outcome[T]{err: ctxWithCancel.Err()}
 		t.changeState(IsRunning, IsCancelled)
 		return
 

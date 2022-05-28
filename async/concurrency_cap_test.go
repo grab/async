@@ -100,7 +100,7 @@ func TestRunWithConcurrencyLevelC_SadPath(t *testing.T) {
 	for _, test := range tests {
 		m := test
 
-		taskChan := make(chan SilentTask)
+		taskChan := make(chan SilentTask, m.taskCount)
 		ctx, _ := context.WithTimeout(context.Background(), m.timeOut*time.Millisecond)
 
 		go func() {

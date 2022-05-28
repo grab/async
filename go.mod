@@ -3,8 +3,10 @@ module github.com/grab/async
 go 1.18
 
 require (
+	github.com/gammazero/deque v0.1.0
 	github.com/jamestrandung/go-data-structure v1.0.0
 	github.com/stretchr/testify v1.7.1
+	go.uber.org/goleak v1.1.12
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0
 )
 

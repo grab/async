@@ -16,12 +16,16 @@ func cancelRemainingTasks[T SilentTask](tasks <-chan T) {
 				t.Cancel()
 			}
 		default:
-			break
+			return
 		}
 	}
 }
 
 // RunWithConcurrencyLevelC runs the given tasks up to the max concurrency level.
+//
+// Note: When `ctx` is cancelled, we spawn a new goroutine to cancel all remaining tasks in the given channel.
+// To avoid memory leak, client MUST make sure new tasks will eventually stop arriving once `ctx` is cancelled
+// so that the new goroutine can return.
 func RunWithConcurrencyLevelC[T SilentTask](ctx context.Context, concurrencyLevel int, tasks <-chan T) SilentTask {
 	if concurrencyLevel <= 0 {
 		concurrencyLevel = runtime.NumCPU()

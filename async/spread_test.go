@@ -32,7 +32,7 @@ func TestSpread(t *testing.T) {
 
 	// Make sure we completed within duration
 	dt := int(time.Now().Sub(t0).Seconds() * 1000)
-	assert.True(t, dt > 150 && dt < 250, fmt.Sprintf("%v ms.", dt))
+	assert.True(t, dt > 150 && dt < 300, fmt.Sprintf("%v ms.", dt))
 
 	// Make sure all tasks are done
 	for _, task := range tasks {

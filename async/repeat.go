@@ -25,14 +25,12 @@ func Repeat(ctx context.Context, interval time.Duration, action SilentWork) Sile
 
 	return InvokeInSilence(
 		ctx, func(taskCtx context.Context) error {
-			timer := time.NewTicker(interval)
 			for {
 				select {
 				case <-taskCtx.Done():
-					timer.Stop()
-					return nil
+					return taskCtx.Err()
 
-				case <-timer.C:
+				case <-time.After(interval):
 					if err := safeAction(taskCtx); err != nil {
 						log.Printf("error repeating task: %s", err.Error())
 					}

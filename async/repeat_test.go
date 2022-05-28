@@ -17,7 +17,11 @@ func TestRepeat(t *testing.T) {
 		t, func() {
 			out := make(chan bool, 1)
 			task := Repeat(
-				context.Background(), time.Nanosecond*10, func(context.Context) error {
+				context.Background(), time.Millisecond*100, func(context.Context) error {
+					defer func() {
+						recover()
+					}()
+
 					out <- true
 					return nil
 				},
@@ -29,6 +33,7 @@ func TestRepeat(t *testing.T) {
 			assert.True(t, v)
 
 			task.Cancel()
+			close(out)
 		},
 	)
 }
@@ -36,7 +41,11 @@ func TestRepeat(t *testing.T) {
 func ExampleRepeat() {
 	out := make(chan bool, 1)
 	task := Repeat(
-		context.TODO(), time.Nanosecond*10, func(context.Context) error {
+		context.Background(), time.Nanosecond*10, func(context.Context) error {
+			defer func() {
+				recover()
+			}()
+
 			out <- true
 			return nil
 		},
@@ -48,6 +57,7 @@ func ExampleRepeat() {
 	fmt.Println(v)
 
 	task.Cancel()
+	close(out)
 
 	// Output:
 	// true
