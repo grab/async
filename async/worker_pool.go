@@ -11,17 +11,17 @@ import (
 )
 
 const (
-	// If all workers stay idle for at least this duration, then kill one.
-	idleTimeout = 2 * time.Second
+	// The default maximum duration that a worker can stay idle before one of them gets killed.
+	defaultIdleTimeout = 2 * time.Second
 )
 
-// queuedTask represents a task to be executed using the provided context
+// queuedTask represents a task to be executed using the provided context.
 type queuedTask struct {
 	task SilentTask
 	ctx  context.Context
 }
 
-// run executes the queued task using the provided context
+// run executes the queued task using the provided context.
 func (qt *queuedTask) run() {
 	qt.task.Execute(qt.ctx)
 	// Worker is already running on an independent goroutine. We must wait for
@@ -29,7 +29,7 @@ func (qt *queuedTask) run() {
 	qt.task.Wait()
 }
 
-// cancel cancels the queued task
+// cancel cancels the queued task.
 func (qt *queuedTask) cancel() {
 	qt.task.Cancel()
 }
@@ -37,13 +37,14 @@ func (qt *queuedTask) cancel() {
 // WorkerPool is similar to a thread pool in Java, where the number of concurrent
 // goroutines processing requests does not exceed the configured maximum.
 type WorkerPool struct {
-	maxSize int
+	*workerPoolConfigs
 
 	taskQueue          chan *queuedTask
 	workerQueue        chan *queuedTask
 	stoppedChan        chan struct{}
 	stopSignal         chan struct{}
 	waitingQueue       deque.Deque
+	workerCount        int
 	stopLock           sync.Mutex
 	stopOnce           sync.Once
 	stopped            bool
@@ -51,23 +52,25 @@ type WorkerPool struct {
 	waitBeforeShutdown bool
 }
 
-// New creates and starts a pool of worker goroutines.
+// NewWorkerPool creates and starts a pool of worker goroutines.
 //
 // `maxSize` specifies the maximum number of workers that can execute tasks
 // concurrently. When there's no incoming tasks, workers get killed 1-by-1
 // until there's no remaining workers.
-func New(maxSize int) *WorkerPool {
-	// Default is number of CPU cores.
-	if maxSize < 1 {
-		maxSize = runtime.NumCPU()
-	}
-
+func NewWorkerPool(options ...WorkerPoolOption) *WorkerPool {
 	pool := &WorkerPool{
-		maxSize:     maxSize,
+		workerPoolConfigs: &workerPoolConfigs{
+			maxSize:     runtime.NumCPU(),
+			idleTimeout: defaultIdleTimeout,
+		},
 		taskQueue:   make(chan *queuedTask, 1),
 		workerQueue: make(chan *queuedTask),
 		stopSignal:  make(chan struct{}),
 		stoppedChan: make(chan struct{}),
+	}
+
+	for _, o := range options {
+		o(pool.workerPoolConfigs)
 	}
 
 	// Start the task dispatcher.
@@ -181,7 +184,6 @@ func (p *WorkerPool) Pause(ctx context.Context) {
 func (p *WorkerPool) dispatch() {
 	defer close(p.stoppedChan)
 
-	var workerCount int
 	var idle bool
 	var wg sync.WaitGroup
 
@@ -192,7 +194,7 @@ Loop:
 		// Once the waiting queue is empty, then go back to submitting incoming tasks
 		// directly to available workers.
 		if p.waitingQueue.Len() != 0 {
-			if !p.processWaitingQueue() {
+			if !p.processWaitingQueue(&wg) {
 				break Loop
 			}
 
@@ -210,10 +212,13 @@ Loop:
 			case p.workerQueue <- task:
 			default:
 				// Create a new worker, if not at max.
-				if workerCount < p.maxSize {
+				if p.workerCount < p.maxSize {
 					wg.Add(1)
-					go startWorker(task, p.workerQueue, &wg)
-					workerCount++
+					go func() {
+						task.run()
+						p.spawnWorker(&wg)
+					}()
+					p.workerCount++
 
 				} else {
 					// Enqueue task to be executed by next available worker.
@@ -224,13 +229,11 @@ Loop:
 
 			idle = false
 
-		case <-time.After(idleTimeout):
+		case <-time.After(p.idleTimeout):
 			// Timed out waiting for a new task to arrive. Kill an available worker if
 			// this worker pool has been idle for the whole duration.
-			if idle && workerCount > 0 {
-				if p.killIdleWorker() {
-					workerCount--
-				}
+			if idle && p.workerCount > 0 {
+				p.killIdleWorker()
 			}
 
 			idle = true
@@ -244,25 +247,19 @@ Loop:
 	}
 
 	// Stop all workers as they become available.
-	for workerCount > 0 {
+	for p.workerCount > 0 {
 		p.workerQueue <- nil
-		workerCount--
+		p.workerCount--
 	}
 
 	wg.Wait()
 }
 
-// startWorker runs the initial task, then starts a worker waiting for more.
-func startWorker(task *queuedTask, workerQueue chan *queuedTask, wg *sync.WaitGroup) {
-	task.run()
-	worker(workerQueue, wg)
-}
-
-// worker executes tasks and stops when it receives a nil task.
-func worker(workerQueue chan *queuedTask, wg *sync.WaitGroup) {
+// spawnWorker creates a new worker to execute tasks and stops it on receiving a nil task.
+func (p *WorkerPool) spawnWorker(wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	for task := range workerQueue {
+	for task := range p.workerQueue {
 		if task == nil {
 			return
 		}
@@ -292,17 +289,26 @@ func (p *WorkerPool) stop(waitBeforeShutdown bool) {
 	<-p.stoppedChan
 }
 
-// processWaitingQueue puts new tasks onto the waiting queue, and removes tasks from
-// the waiting queue as workers become available. Returns false if this worker pool
-// was stopped.
-func (p *WorkerPool) processWaitingQueue() bool {
+// processWaitingQueue puts new tasks onto the waiting queue, and removes tasks from the
+// waiting queue as workers become available. If the queue's length reaches the configured
+// threshold, a configured amount of new workers will be spawned to increase throughput.
+// These new workers will eventually get killed once they stay idle at a later time. Returns
+// false if this worker pool was stopped.
+func (p *WorkerPool) processWaitingQueue(wg *sync.WaitGroup) bool {
 	select {
 	case t, ok := <-p.taskQueue:
 		if !ok {
 			return false
 		}
 
-		p.pushBack(t)
+		curQueueLength := p.pushBack(t)
+		if curQueueLength == int32(p.burstQueueThreshold) {
+			for i := 0; i < p.burstCapacity; i++ {
+				wg.Add(1)
+				go p.spawnWorker(wg)
+				p.workerCount++
+			}
+		}
 
 	case p.workerQueue <- p.peekFront():
 		// A task was given to an available worker.
@@ -317,6 +323,7 @@ func (p *WorkerPool) killIdleWorker() bool {
 	select {
 	case p.workerQueue <- nil:
 		// Sent kill signal to worker.
+		p.workerCount--
 		return true
 	default:
 		// No ready workers. All, if any, workers are busy.
@@ -341,9 +348,13 @@ func (p *WorkerPool) drainQueuedTasks(toCancel bool) {
 }
 
 // pushBack pushes a task to the back of the queue
-func (p *WorkerPool) pushBack(task *queuedTask) {
+func (p *WorkerPool) pushBack(task *queuedTask) int32 {
 	p.waitingQueue.PushBack(task)
-	atomic.StoreInt32(&p.pendingSize, int32(p.waitingQueue.Len()))
+
+	queueLength := int32(p.waitingQueue.Len())
+	atomic.StoreInt32(&p.pendingSize, queueLength)
+
+	return queueLength
 }
 
 // popFront removes and returns the task at the front of the queue

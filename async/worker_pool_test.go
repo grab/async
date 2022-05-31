@@ -6,12 +6,14 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 const max = 20
 
 func TestExample(t *testing.T) {
-	wp := New(2)
+	wp := NewWorkerPool(WithMaxSize(2))
 	requests := []string{"alpha", "beta", "gamma", "delta", "epsilon"}
 
 	rspChan := make(chan string, len(requests))
@@ -47,14 +49,14 @@ func TestExample(t *testing.T) {
 }
 
 func TestMaxWorkers(t *testing.T) {
-	wp := New(0)
+	wp := NewWorkerPool(WithMaxSize(0))
 	wp.Stop()
 
 	if wp.maxSize != runtime.NumCPU() {
 		t.Fatal("should have created some workers")
 	}
 
-	wp = New(max)
+	wp = NewWorkerPool(WithMaxSize(max))
 	defer wp.Stop()
 
 	if wp.Size() != max {
@@ -96,14 +98,36 @@ func TestMaxWorkers(t *testing.T) {
 	close(release)
 }
 
+func TestBurstCapacity(t *testing.T) {
+	wp := NewWorkerPool(WithMaxSize(5), WithBurst(10, 5))
+	defer wp.Stop()
+
+	// Spawn 15 tasks with long sleep time to make the initial 5 workers block while the
+	// queue fills up to reach the burst threshold.
+	for i := 0; i < 15; i++ {
+		wp.Submit(
+			context.Background(), NewSilentTask(
+				func(ctx context.Context) error {
+					time.Sleep(500 * time.Millisecond)
+					return nil
+				},
+			),
+		)
+	}
+
+	// Wait for the burst workers to spawn
+	time.Sleep(100 * time.Millisecond)
+	assert.Equal(t, 10, wp.workerCount)
+}
+
 func TestReuseWorkers(t *testing.T) {
-	wp := New(5)
+	wp := NewWorkerPool(WithMaxSize(5))
 	defer wp.Stop()
 
 	release := make(chan struct{})
 
 	// Cause worker to be created, and available for reuse before next task.
-	for i := 0; i < 1; i++ {
+	for i := 0; i < 10; i++ {
 		wp.Submit(
 			context.Background(), NewSilentTask(
 				func(ctx context.Context) error {
@@ -127,7 +151,7 @@ func TestReuseWorkers(t *testing.T) {
 }
 
 func TestWorkerTimeout(t *testing.T) {
-	wp := New(max)
+	wp := NewWorkerPool(WithMaxSize(max))
 	defer wp.Stop()
 
 	// Start workers, and have them all wait on ctx before completing.
@@ -150,20 +174,20 @@ func TestWorkerTimeout(t *testing.T) {
 	}
 
 	// Check that a worker timed out.
-	time.Sleep(idleTimeout*2 + idleTimeout/2)
+	time.Sleep(defaultIdleTimeout*2 + defaultIdleTimeout/2)
 	if countReady(wp) != max-1 {
 		t.Fatal("First worker did not timeout")
 	}
 
 	// Check that another worker timed out.
-	time.Sleep(idleTimeout)
+	time.Sleep(defaultIdleTimeout)
 	if countReady(wp) != max-2 {
 		t.Fatal("Second worker did not timeout")
 	}
 }
 
 func TestStop(t *testing.T) {
-	wp := New(max)
+	wp := NewWorkerPool(WithMaxSize(max))
 
 	// Start workers, and have them all wait on ctx before completing.
 	ctx, cancel := context.WithCancel(context.Background())
@@ -186,7 +210,7 @@ func TestStop(t *testing.T) {
 	}
 
 	// Start workers, and have them all wait on a channel before completing.
-	wp = New(5)
+	wp = NewWorkerPool(WithMaxSize(5))
 
 	release := make(chan struct{})
 	finished := make(chan struct{}, max)
@@ -232,7 +256,7 @@ Count:
 
 func TestStopWait(t *testing.T) {
 	// Start workers, and have them all wait on a channel before completing.
-	wp := New(5)
+	wp := NewWorkerPool(WithMaxSize(5))
 	release := make(chan struct{})
 	finished := make(chan struct{}, max)
 
@@ -273,7 +297,7 @@ func TestStopWait(t *testing.T) {
 	}
 
 	// Make sure that calling StopWait() with no queued tasks is OK.
-	wp = New(5)
+	wp = NewWorkerPool(WithMaxSize(5))
 	wp.StopWait()
 
 	if anyReady(wp) {
@@ -285,7 +309,7 @@ func TestStopWait(t *testing.T) {
 }
 
 func TestDrainingTasks(t *testing.T) {
-	wp := New(2)
+	wp := NewWorkerPool(WithMaxSize(2))
 	defer wp.Stop()
 
 	releaseChan := make(chan struct{})
@@ -303,7 +327,7 @@ func TestDrainingTasks(t *testing.T) {
 	}
 
 	// Start a goroutine to free the workers after calling stop. This way the
-    // dispatcher can exit, then when this goroutine runs, the worker pool
+	// dispatcher can exit, then when this goroutine runs, the worker pool
 	// can exit.
 	go func() {
 		<-time.After(time.Millisecond)
@@ -321,7 +345,7 @@ func TestDrainingTasks(t *testing.T) {
 }
 
 func TestStopRace(t *testing.T) {
-	wp := New(max)
+	wp := NewWorkerPool(WithMaxSize(max))
 	defer wp.Stop()
 
 	workRelChan := make(chan struct{})
@@ -382,7 +406,7 @@ func TestWaitingQueueSizeRace(t *testing.T) {
 		workers    = 5
 	)
 
-	wp := New(workers)
+	wp := NewWorkerPool(WithMaxSize(workers))
 	defer wp.Stop()
 
 	maxChan := make(chan int)
@@ -431,7 +455,7 @@ func TestWaitingQueueSizeRace(t *testing.T) {
 }
 
 func TestPause(t *testing.T) {
-	wp := New(25)
+	wp := NewWorkerPool(WithMaxSize(25))
 	defer wp.Stop()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -619,7 +643,7 @@ func TestPause(t *testing.T) {
 func TestWorkerLeak(t *testing.T) {
 	const workerCount = 100
 
-	wp := New(workerCount)
+	wp := NewWorkerPool(WithMaxSize(workerCount))
 
 	// Start workers, and have them all wait on a channel before completing.
 	for i := 0; i < workerCount; i++ {
