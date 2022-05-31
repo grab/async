@@ -1,3 +1,6 @@
+// Copyright (c) 2022 James Tran Dung, All rights reserved.
+// Use of this source code is governed by an MIT-style license that can be found in the LICENSE file
+
 package async
 
 import (
@@ -99,8 +102,13 @@ func TestMaxWorkers(t *testing.T) {
 }
 
 func TestBurstCapacity(t *testing.T) {
-	wp := NewWorkerPool(WithMaxSize(5), WithBurst(10, 5))
+	wp := NewWorkerPool(
+		WithMaxSize(5),
+		WithBurst(10, 5),
+	)
 	defer wp.Stop()
+
+	context.WithTimeout(context.Background(), 2*time.Second)
 
 	// Spawn 15 tasks with long sleep time to make the initial 5 workers block while the
 	// queue fills up to reach the burst threshold.

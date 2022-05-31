@@ -11,6 +11,7 @@ Currently, this package includes:
 
 * Asynchronous tasks with cancellations, context propagation and state.
 * Task chaining by using continuations.
+* Worker pool - spawning a fixed-size pool of workers to execute tasks in parallel.
 * Fork/join pattern - running a batch of tasks in parallel and blocking until all finish.
 * Concurrency cap pattern - running a batch of tasks concurrently with a cap on max concurrency level.
 * Throttling pattern - throttling task execution at a specified rate.
@@ -40,7 +41,7 @@ silentTask := NewSilentTask(func(context.Context) error {
 The function will be executed asynchronously. You can query whether it's completed by calling `task.State()`, which 
 is a non-blocking function. Alternative, you can wait for the response using `task.Outcome()` or `silentTask.Wait()`, 
 which will block the execution until the task is done. These functions are quite similar to the equivalents in Java
-`Future.isDone()` or `Future.get()`
+`Future.isDone()` or `Future.get()`.
 
 ### Cancelling
 There could be case that we don't care about the result anymore some time after execution. In this case, a task can 
@@ -51,6 +52,37 @@ To have a follow-up action after a task is done, you can use the provided family
 be very useful to create a chain of processing, or to have a teardown process at the end of a task.
 
 ## Features
+
+### Worker pool
+
+Similar to a thread pool in Java, a worker pool is a fixed-size pool of goroutines that can execute any kind of tasks
+as they come. When the number of tasks grows larger than the number of available workers, new tasks will be pushed into
+a waiting queue to be executed later.
+
+Our implementation is an upgrade/retrofit of the popular https://github.com/gammazero/workerpool repo to match the 
+behaviors of other features in this library.
+
+```go
+wp := NewWorkerPool(
+    WithMaxSize(5), 
+	WithBurst(10, 5), 
+)
+defer wp.Stop()
+
+task := NewTask(func(context.Context) (animal, error) {
+    // run the job
+    return res, err
+})
+
+ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+defer cancel()
+
+// The given context will be used to execute the task
+wp.Submit(ctxWithTimeout, task)
+
+// Block and wait for the outcome
+result, err := task.Outcome()
+```
  
 ### Fork join
 `ForkJoin` is meant for running multiple subtasks concurrently. They could be different parts of the main task which 
