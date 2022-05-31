@@ -302,8 +302,8 @@ func TestDrainingTasks(t *testing.T) {
 		)
 	}
 
-	// Start a goroutine to free the workers after calling stop. This way
-	// the dispatcher can exit, then when this goroutine runs, the workerpool
+	// Start a goroutine to free the workers after calling stop. This way the
+    // dispatcher can exit, then when this goroutine runs, the worker pool
 	// can exit.
 	go func() {
 		<-time.After(time.Millisecond)
@@ -412,7 +412,7 @@ func TestWaitingQueueSizeRace(t *testing.T) {
 		}()
 	}
 
-	// Find maximum queuesize seen by any goroutine.
+	// Find maximum queue size seen by any goroutine.
 	maxMax := 0
 	for g := 0; g < goroutines; g++ {
 		max := <-maxChan
@@ -483,7 +483,7 @@ func TestPause(t *testing.T) {
 	// Cancel context to unpause workers.
 	cancel()
 
-	// Check that task was run after unpausing.
+	// Check that task was run after un-pausing.
 	select {
 	case <-ran:
 	case <-time.After(time.Second):
