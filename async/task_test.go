@@ -65,27 +65,25 @@ func TestOutcomeTimeout(t *testing.T) {
 }
 
 func TestContinueWithChain(t *testing.T) {
-	ctx := context.Background()
-
-	task1 := Invoke(
-		ctx, func(context.Context) (int, error) {
+	task1 := NewTask(
+		func(context.Context) (int, error) {
 			return 1, nil
 		},
 	)
 
 	task2 := ContinueWith(
-		ctx, task1, func(_ context.Context, result int, _ error) (int, error) {
+		task1, func(_ context.Context, result int, _ error) (int, error) {
 			return result + 1, nil
 		},
 	)
 
 	task3 := ContinueWith(
-		ctx, task2, func(_ context.Context, result int, _ error) (int, error) {
+		task2, func(_ context.Context, result int, _ error) (int, error) {
 			return result + 1, nil
 		},
 	)
 
-	result, err := task3.Outcome()
+	result, err := task3.Run(context.Background()).Outcome()
 	assert.Equal(t, 3, result)
 	assert.Nil(t, err)
 }
@@ -93,30 +91,28 @@ func TestContinueWithChain(t *testing.T) {
 func TestContinueInSilenceChain(t *testing.T) {
 	num := 0
 
-	ctx := context.Background()
-
-	task1 := InvokeInSilence(
-		ctx, func(context.Context) error {
+	task1 := NewSilentTask(
+		func(context.Context) error {
 			num += 1
 			return nil
 		},
 	)
 
 	task2 := ContinueInSilence(
-		ctx, task1, func(context.Context, error) error {
+		task1, func(context.Context, error) error {
 			num += 1
 			return nil
 		},
 	)
 
 	task3 := ContinueInSilence(
-		ctx, task2, func(context.Context, error) error {
+		task2, func(context.Context, error) error {
 			num += 1
 			return nil
 		},
 	)
 
-	task3.Wait()
+	task3.Execute(context.Background()).Wait()
 	assert.Equal(t, 3, num)
 	assert.Nil(t, task3.Error())
 }
@@ -124,29 +120,27 @@ func TestContinueInSilenceChain(t *testing.T) {
 func TestContinueWithNoResultChain(t *testing.T) {
 	num := 0
 
-	ctx := context.Background()
-
-	task1 := Invoke(
-		ctx, func(context.Context) (int, error) {
+	task1 := NewTask(
+		func(context.Context) (int, error) {
 			return 1, nil
 		},
 	)
 
 	task2 := ContinueWithNoResult(
-		ctx, task1, func(_ context.Context, result int, _ error) error {
+		task1, func(_ context.Context, result int, _ error) error {
 			num = result + 1
 			return nil
 		},
 	)
 
 	task3 := ContinueInSilence(
-		ctx, task2, func(context.Context, error) error {
+		task2, func(context.Context, error) error {
 			num += 1
 			return nil
 		},
 	)
 
-	task3.Wait()
+	task3.Execute(context.Background()).Wait()
 	assert.Equal(t, 3, num)
 	assert.Nil(t, task3.Error())
 }
@@ -154,28 +148,26 @@ func TestContinueWithNoResultChain(t *testing.T) {
 func TestContinueWithResultChain(t *testing.T) {
 	num := 0
 
-	ctx := context.Background()
-
-	task1 := Invoke(
-		ctx, func(context.Context) (int, error) {
+	task1 := NewTask(
+		func(context.Context) (int, error) {
 			return 1, nil
 		},
 	)
 
 	task2 := ContinueWithNoResult(
-		ctx, task1, func(_ context.Context, result int, _ error) error {
+		task1, func(_ context.Context, result int, _ error) error {
 			num = result + 1
 			return nil
 		},
 	)
 
 	task3 := ContinueWithResult(
-		ctx, task2, func(context.Context, error) (int, error) {
+		task2, func(context.Context, error) (int, error) {
 			return num + 1, nil
 		},
 	)
 
-	result, err := task3.Outcome()
+	result, err := task3.Run(context.Background()).Outcome()
 	assert.Equal(t, 3, result)
 	assert.Nil(t, err)
 }
@@ -191,11 +183,11 @@ func TestContinueTimeout(t *testing.T) {
 	)
 
 	second := ContinueWith(
-		ctx, first, func(_ context.Context, result int, err error) (int, error) {
+		first, func(_ context.Context, result int, err error) (int, error) {
 			time.Sleep(500 * time.Millisecond)
 			return result, err
 		},
-	)
+	).Run(ctx)
 
 	r1, err1 := first.Outcome()
 	assert.Equal(t, 5, r1)

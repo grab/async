@@ -151,43 +151,55 @@ func InvokeInSilence(ctx context.Context, action SilentWork) SilentTask {
 	)
 }
 
-// ContinueWith proceeds with the next task once the current one is finished.
-func ContinueWith[T any, S any](ctx context.Context, currentTask Task[T], nextAction func(context.Context, T, error) (S, error)) Task[S] {
-	return Invoke(
-		ctx, func(taskCtx context.Context) (S, error) {
-			result, err := currentTask.Outcome()
+// ContinueWith proceeds with the next task once the current one is finished. When we have a chain of tasks like
+// A -> B -> C, executing C will trigger A & B as well. However, executing A will NOT trigger B & C.
+func ContinueWith[T any, S any](currentTask Task[T], nextAction func(context.Context, T, error) (S, error)) Task[S] {
+	return NewTask(
+		func(taskCtx context.Context) (S, error) {
+			// Attempt to run the current task in case it has not been executed.
+			currentTask.Execute(taskCtx)
 
+			result, err := currentTask.Outcome()
 			return nextAction(taskCtx, result, err)
 		},
 	)
 }
 
-// ContinueWithNoResult proceeds with the next task once the current one is finished.
-func ContinueWithNoResult[T any](ctx context.Context, currentTask Task[T], nextAction func(context.Context, T, error) error) SilentTask {
-	return Invoke(
-		ctx, func(taskCtx context.Context) (struct{}, error) {
-			result, err := currentTask.Outcome()
+// ContinueWithNoResult proceeds with the next task once the current one is finished. When we have a chain of tasks
+// like A -> B -> C, executing C will trigger A & B as well. However, executing A will NOT trigger B & C.
+func ContinueWithNoResult[T any](currentTask Task[T], nextAction func(context.Context, T, error) error) SilentTask {
+	return NewSilentTask(
+		func(taskCtx context.Context) error {
+			// Attempt to run the current task in case it has not been executed.
+			currentTask.Execute(taskCtx)
 
-			return struct{}{}, nextAction(taskCtx, result, err)
+			result, err := currentTask.Outcome()
+			return nextAction(taskCtx, result, err)
 		},
 	)
 }
 
-// ContinueInSilence proceeds with the next task once the current one is finished.
-func ContinueInSilence(ctx context.Context, currentTask SilentTask, nextAction func(context.Context, error) error) SilentTask {
-	return Invoke(
-		ctx, func(taskCtx context.Context) (struct{}, error) {
+// ContinueInSilence proceeds with the next task once the current one is finished. When we have a chain of tasks like
+// A -> B -> C, executing C will trigger A & B as well. However, executing A will NOT trigger B & C.
+func ContinueInSilence(currentTask SilentTask, nextAction func(context.Context, error) error) SilentTask {
+	return NewSilentTask(
+		func(taskCtx context.Context) error {
+			// Attempt to run the current task in case it has not been executed.
+			currentTask.Execute(taskCtx)
 			currentTask.Wait()
 
-			return struct{}{}, nextAction(taskCtx, currentTask.Error())
+			return nextAction(taskCtx, currentTask.Error())
 		},
 	)
 }
 
-// ContinueWithResult proceeds with the next task once the current one is finished.
-func ContinueWithResult[T any](ctx context.Context, currentTask SilentTask, nextAction func(context.Context, error) (T, error)) Task[T] {
-	return Invoke(
-		ctx, func(taskCtx context.Context) (T, error) {
+// ContinueWithResult proceeds with the next task once the current one is finished. When we have a chain of tasks like
+// A -> B -> C, executing C will trigger A & B as well. However, executing A will NOT trigger B & C.
+func ContinueWithResult[T any](currentTask SilentTask, nextAction func(context.Context, error) (T, error)) Task[T] {
+	return NewTask(
+		func(taskCtx context.Context) (T, error) {
+			// Attempt to run the current task in case it has not been executed.
+			currentTask.Execute(taskCtx)
 			currentTask.Wait()
 
 			return nextAction(taskCtx, currentTask.Error())

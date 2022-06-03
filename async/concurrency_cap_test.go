@@ -189,7 +189,7 @@ func TestTestRunWithConcurrencyLevelS_WithCancellingHalfway(t *testing.T) {
 
 		tasks[j] = NewSilentTask(
 			func(context.Context) error {
-				time.Sleep(time.Millisecond * 10)
+				time.Sleep(time.Millisecond * 50)
 
 				return nil
 			},
@@ -201,7 +201,8 @@ func TestTestRunWithConcurrencyLevelS_WithCancellingHalfway(t *testing.T) {
 	RunWithConcurrencyLevelS(ctxWithCancel, 2, tasks)
 
 	// Sleep and cancel right after first 2 tasks complete
-	time.Sleep(time.Millisecond * 15)
+	tasks[0].Wait()
+	tasks[1].Wait()
 	cancel()
 
 	WaitAll(tasks)

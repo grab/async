@@ -13,19 +13,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestNewBatcher(t *testing.T) {
-	// b := NewBatcher(
-	// 	func(num []int) error {
-	// 		return nil
-	// 	},
-	// 	WithShutdownDuration(500 * time.Millisecond),
-	// 	WithAutoProcessSize(2),
-	// 	WithAutoProcessDuration(200 * time.Millisecond),
-	// )
-	//
-	// assert.Equal(t, 2, b.autoProcessSize)
-}
-
 func TestBatch(t *testing.T) {
 	const taskCount = 10
 
@@ -49,14 +36,14 @@ func TestBatch(t *testing.T) {
 		number := i
 
 		ContinueInSilence(
-			context.Background(), b.Append(number), func(_ context.Context, err error) error {
+			b.Append(number), func(_ context.Context, err error) error {
 				defer wg.Done()
 
 				assert.Nil(t, err)
 
 				return nil
 			},
-		)
+		).Execute(context.Background())
 	}
 
 	assert.Equal(t, 10, b.Size())
@@ -92,17 +79,17 @@ func TestBatcher_AppendAutoProcessBySize(t *testing.T) {
 		number := i
 
 		tasks[i] = ContinueInSilence(
-			context.Background(), b.Append(number), func(_ context.Context, err error) error {
+			b.Append(number), func(_ context.Context, err error) error {
 				assert.Nil(t, err)
 
 				return err
 			},
-		)
+		).Execute(context.Background())
 	}
 
-	assert.Equal(t, 0, b.Size(), "All pending tasks should have been auto processed")
-
 	WaitAll(tasks)
+
+	assert.Equal(t, 0, b.Size(), "All pending tasks should have been auto processed")
 
 	for i := 0; i < taskCount; i++ {
 		assert.Equal(t, i*10, <-out)
@@ -133,12 +120,12 @@ func TestBatcher_AutoProcessOnInterval(t *testing.T) {
 		number := i
 
 		tasks[i] = ContinueInSilence(
-			context.Background(), b.Append(number), func(_ context.Context, err error) error {
+			b.Append(number), func(_ context.Context, err error) error {
 				assert.Nil(t, err)
 
 				return err
 			},
-		)
+		).Execute(context.Background())
 	}
 
 	assert.Equal(t, 10, b.Size())
@@ -170,12 +157,12 @@ func TestBatcher_Shutdown(t *testing.T) {
 		number := i
 
 		ContinueInSilence(
-			context.Background(), b.Append(number), func(_ context.Context, err error) error {
+			b.Append(number), func(_ context.Context, err error) error {
 				assert.Nil(t, err)
 
 				return err
 			},
-		)
+		).Execute(context.Background())
 	}
 
 	assert.Equal(t, 10, b.Size())
@@ -206,10 +193,10 @@ func TestBatcher_ShutdownWithTimeout(t *testing.T) {
 		number := i
 
 		tasks[i] = ContinueInSilence(
-			context.Background(), b.Append(number), func(_ context.Context, err error) error {
+			b.Append(number), func(_ context.Context, err error) error {
 				return err
 			},
-		)
+		).Execute(context.Background())
 	}
 
 	assert.Equal(t, 10, b.Size())
@@ -225,7 +212,7 @@ func TestBatcher_ShutdownWithTimeout(t *testing.T) {
 	}
 }
 
-func ExampleBatch() {
+func ExampleBatcher() {
 	var wg sync.WaitGroup
 	wg.Add(2)
 
@@ -237,20 +224,20 @@ func ExampleBatch() {
 	)
 
 	ContinueInSilence(
-		context.Background(), b.Append(1), func(_ context.Context, err error) error {
+		b.Append(1), func(_ context.Context, err error) error {
 			wg.Done()
 
 			return nil
 		},
-	)
+	).Execute(context.Background())
 
 	ContinueInSilence(
-		context.Background(), b.Append(2), func(_ context.Context, err error) error {
+		b.Append(2), func(_ context.Context, err error) error {
 			wg.Done()
 
 			return nil
 		},
-	)
+	).Execute(context.Background())
 
 	b.Process(context.Background())
 

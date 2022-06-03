@@ -34,7 +34,8 @@ type batcher[P any] struct {
 // and then execute all in one go.
 type Batcher[P any] interface {
 	// Append adds a new payload to the batch and returns a task for that particular payload.
-	// Clients can block and wait for the returned task to complete before extracting result.
+	// Clients MUST execute the returned task before blocking and waiting for it to complete
+	// to extract result.
 	Append(payload P) SilentTask
 	// Size returns the length of the pending queue.
 	Size() int
@@ -105,13 +106,6 @@ func (b *batcher[P]) Append(payload P) SilentTask {
 		b.batchExecutor = b.createBatchExecutor()
 	}
 
-	// Extract result from the processed batch
-	t := ContinueInSilence(
-		context.Background(), b.batchExecutor, func(_ context.Context, err error) error {
-			return err
-		},
-	)
-
 	// Add to the task queue
 	b.pending = append(
 		b.pending, batchEntry[P]{
@@ -121,11 +115,25 @@ func (b *batcher[P]) Append(payload P) SilentTask {
 
 	// Auto process if configured and reached the threshold
 	if b.autoProcessSize > 0 && len(b.pending) == b.autoProcessSize {
-		// Use doProcess directly as we're holding the lock
-		b.doProcess(context.Background(), false, b.batchID)
+		curBatchId := b.batchID
+
+		go func() {
+			b.Lock()
+			defer b.Unlock()
+
+			b.doProcess(context.Background(), false, curBatchId)
+		}()
 	}
 
-	return t
+	// Extract result from the processed batch
+	curBatchExecutor := b.batchExecutor
+
+	return NewSilentTask(
+		func(ctx context.Context) error {
+			curBatchExecutor.Wait()
+			return curBatchExecutor.Error()
+		},
+	)
 }
 
 func (b *batcher[P]) Size() int {

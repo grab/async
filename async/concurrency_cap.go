@@ -69,11 +69,11 @@ func RunWithConcurrencyLevelC[T SilentTask](ctx context.Context, concurrencyLeve
 
 						// Return the worker to the common pool
 						ContinueInSilence(
-							taskCtx, t.Execute(taskCtx), func(context.Context, error) error {
+							t, func(context.Context, error) error {
 								workers <- workerID
 								return nil
 							},
-						)
+						).Execute(taskCtx)
 					}
 				}
 			}
@@ -110,11 +110,11 @@ func RunWithConcurrencyLevelS[T SilentTask](ctx context.Context, concurrencyLeve
 				case sem <- struct{}{}:
 					// Return the worker to the common pool
 					ContinueInSilence(
-						taskCtx, t.Execute(taskCtx), func(context.Context, error) error {
+						t, func(context.Context, error) error {
 							<-sem
 							return nil
 						},
-					)
+					).Execute(taskCtx)
 				}
 			}
 
