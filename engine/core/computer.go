@@ -3,7 +3,7 @@ package core
 import "github.com/grab/async/async"
 
 type computer interface {
-    Compute(p any) async.SilentTask
+	Compute(p any) async.SilentTask
 }
 
 // type Computer[P any] struct {

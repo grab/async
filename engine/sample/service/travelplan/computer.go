@@ -1,23 +1,23 @@
-package costconfigs
+package travelplan
 
 import (
 	"context"
 
 	"github.com/grab/async/async"
 	"github.com/grab/async/engine/sample/config"
-	"github.com/grab/async/engine/sample/service/costconfigs/dummy"
+	"github.com/grab/async/engine/sample/service/travelplan/dummy"
 )
 
 // Computers with external dependencies still has to register itself with the
 // engine using init() so that we can perform validations on plans
 func init() {
-	// fmt.Println("costconfigs")
-	config.Engine.RegisterComputer(CostConfigs{}, computer{})
+	// fmt.Println("travelplan")
+	config.Engine.RegisterComputer(TravelPlan{}, computer{})
 	// fmt.Println(config.Engine)
 }
 
 type computer struct {
-	fetcher dummy.CostConfigsFetcher
+	mapService dummy.MapService
 }
 
 // Computers with external dependencies can register itself with the engine
@@ -25,13 +25,13 @@ type computer struct {
 // to overwrite the dummy computer registered via init()
 
 // InitComputer ...
-func InitComputer(fetcher dummy.CostConfigsFetcher) {
+func InitComputer(mapService dummy.MapService) {
 	c := computer{
-		fetcher: fetcher,
+		mapService: mapService,
 	}
 
-	// fmt.Println("costconfigs")
-	config.Engine.RegisterComputer(CostConfigs{}, c)
+	// fmt.Println("travelplan")
+	config.Engine.RegisterComputer(TravelPlan{}, c)
 	// fmt.Println(config.Engine)
 }
 
@@ -39,13 +39,18 @@ func (c computer) Compute(p any) async.SilentTask {
 	casted := p.(plan)
 
 	task := async.NewTask(
-		func(ctx context.Context) (dummy.MergedCostConfigs, error) {
-			return c.doFetch(), nil
+		func(ctx context.Context) (dummy.TravelPlan, error) {
+			travelPlan, err := c.buildTravelPlan(casted)
+			if err != nil {
+				return c.calculateStraightLineDistance(casted), nil
+			}
+
+			return travelPlan, nil
 		},
 	)
 
-	casted.SetCostConfigs(
-		CostConfigs{
+	casted.SetTravelPlan(
+		TravelPlan{
 			task: task,
 		},
 	)

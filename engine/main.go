@@ -1,20 +1,26 @@
 package main
 
 import (
-    "context"
-    "fmt"
+	"context"
+	"fmt"
 
-    "github.com/grab/async/engine/sample/server"
-    "github.com/grab/async/engine/sample/service"
+	"github.com/grab/async/engine/sample/server"
+	"github.com/grab/async/engine/sample/service"
 )
 
 func main() {
-    server.Serve()
+	server.Serve()
 
-    var p service.ConcretePlan
-    if err := p.Execute(context.Background()) ; err != nil {
-        fmt.Println(err)
-    }
+	p := service.NewPlan(
+		service.CostRequest{
+			PointA: "Clementi",
+			PointB: "Changi Airport",
+		},
+	)
 
-    fmt.Println(p.GetTravelCost())
+	if err := p.Execute(context.Background()); err != nil {
+		fmt.Println(err)
+	}
+
+	fmt.Println(p.GetTravelCost())
 }

@@ -29,7 +29,7 @@ func AddJitterT[T any](t Task[T], maxJitterDurationInMilliseconds int) Task[T] {
 		func(ctx context.Context) (T, error) {
 			waitForRandomJitter(maxJitterDurationInMilliseconds)
 
-			t.Execute(ctx)
+			t.ExecuteSync(ctx)
 
 			return t.Outcome()
 		},
@@ -44,7 +44,7 @@ func AddJitterST(t SilentTask, maxJitterDurationInMilliseconds int) SilentTask {
 		func(ctx context.Context) error {
 			waitForRandomJitter(maxJitterDurationInMilliseconds)
 
-			t.Execute(ctx)
+			t.ExecuteSync(ctx)
 
 			return t.Error()
 		},

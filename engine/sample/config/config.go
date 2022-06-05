@@ -2,6 +2,10 @@ package config
 
 import "github.com/grab/async/engine/core"
 
-var (
-    Engine = core.NewEngine()
-)
+var Engine = &CostEngine{
+	Engine: core.NewEngine(),
+}
+
+type CostEngine struct {
+	core.Engine
+}

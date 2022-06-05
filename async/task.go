@@ -43,6 +43,8 @@ type signal chan struct{}
 type SilentTask interface {
 	// Execute starts this task asynchronously.
 	Execute(ctx context.Context) SilentTask
+	// ExecuteSync starts this task synchronously.
+	ExecuteSync(ctx context.Context) SilentTask
 	// Wait waits for this task to complete.
 	Wait()
 	// Cancel changes the state of this task to `Cancelled`.
@@ -61,6 +63,8 @@ type Task[T any] interface {
 	SilentTask
 	// Run starts this task asynchronously.
 	Run(ctx context.Context) Task[T]
+	// RunSync starts this task synchronously.
+	RunSync(ctx context.Context) Task[T]
 	// Outcome waits for this task to complete and returns the final result & error.
 	Outcome() (T, error)
 }
@@ -235,8 +239,26 @@ func (t *task[T]) Run(ctx context.Context) Task[T] {
 	return t
 }
 
+func (t *task[T]) RunSync(ctx context.Context) Task[T] {
+	ok := t.doRun(ctx)
+	if !ok {
+		t.Wait()
+	}
+
+	return t
+}
+
 func (t *task[T]) Execute(ctx context.Context) SilentTask {
 	go t.doRun(ctx)
+	return t
+}
+
+func (t *task[T]) ExecuteSync(ctx context.Context) SilentTask {
+	ok := t.doRun(ctx)
+	if !ok {
+		t.Wait()
+	}
+
 	return t
 }
 
@@ -260,9 +282,10 @@ func (t *task[T]) Cancel() {
 	}
 }
 
-func (t *task[T]) doRun(ctx context.Context) {
+func (t *task[T]) doRun(ctx context.Context) bool {
+	// Prevent from running the same task twice
 	if !t.changeState(IsCreated, IsRunning) {
-		return // Prevent from running the same task twice
+		return false
 	}
 
 	// When this task get cancelled, this `ctx` will get cancelled as well
@@ -294,7 +317,6 @@ func (t *task[T]) doRun(ctx context.Context) {
 		t.duration = time.Nanosecond * time.Duration(now().UnixNano()-startedAt)
 		t.outcome = outcome[T]{err: ErrCancelled}
 		t.changeState(IsRunning, IsCancelled)
-		return
 
 	// In case of the context timeout or other error, change the state of the
 	// task to cancelled and return right away.
@@ -302,15 +324,15 @@ func (t *task[T]) doRun(ctx context.Context) {
 		t.duration = time.Nanosecond * time.Duration(now().UnixNano()-startedAt)
 		t.outcome = outcome[T]{err: ctxWithCancel.Err()}
 		t.changeState(IsRunning, IsCancelled)
-		return
 
 	// In case where we got an outcome (happy path).
 	case o := <-outcomeCh:
 		t.duration = time.Nanosecond * time.Duration(now().UnixNano()-startedAt)
 		t.outcome = o
 		t.changeState(IsRunning, IsCompleted)
-		return
 	}
+
+	return true
 }
 
 func (t *task[T]) changeState(from, to State) bool {

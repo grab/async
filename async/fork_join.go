@@ -8,17 +8,12 @@ import (
 )
 
 // ForkJoin executes given tasks in parallel and waits for ALL to complete before returning.
-func ForkJoin[T SilentTask](ctx context.Context, tasks []T) SilentTask {
-	return InvokeInSilence(
-		ctx, func(taskCtx context.Context) error {
-			for _, t := range tasks {
-				t.Execute(taskCtx)
-			}
+func ForkJoin[T SilentTask](ctx context.Context, tasks []T) {
+	for _, t := range tasks {
+		t.Execute(ctx)
+	}
 
-			WaitAll(tasks)
-			return nil
-		},
-	)
+	WaitAll(tasks)
 }
 
 // WaitAll waits for all executed tasks to finish.
