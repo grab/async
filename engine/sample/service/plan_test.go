@@ -8,7 +8,7 @@ import (
 )
 
 func TestConcretePlan_IsAnalyzed(t *testing.T) {
-	assert.True(t, config.Engine.IsAnalyzed(ConcretePlan{}))
+	assert.True(t, config.Engine.IsAnalyzed(&ConcretePlan{}))
 }
 
 func TestConcretePlan_IsExecutable(t *testing.T) {

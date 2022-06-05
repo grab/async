@@ -13,7 +13,7 @@ var planName string
 
 func init() {
 	// fmt.Println("ConcretePlan")
-	planName = config.Engine.AnalyzePlan(ConcretePlan{})
+	planName = config.Engine.AnalyzePlan(&ConcretePlan{})
 }
 
 func (c *ConcretePlan) SetCostConfigs(o costconfigs.CostConfigs) {

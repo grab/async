@@ -13,8 +13,11 @@ type ConcretePlan struct {
 	travelcost.TravelCost
 }
 
-func NewPlan(r CostRequest) ConcretePlan {
-	return ConcretePlan{
+func NewPlan(r CostRequest) *ConcretePlan {
+	return &ConcretePlan{
 		CostRequest: r,
 	}
+}
+func (c *ConcretePlan) IsSequential() bool {
+	return false
 }

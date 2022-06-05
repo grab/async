@@ -242,6 +242,7 @@ func (t *task[T]) Run(ctx context.Context) Task[T] {
 func (t *task[T]) RunSync(ctx context.Context) Task[T] {
 	ok := t.doRun(ctx)
 	if !ok {
+		// Task already executed
 		t.Wait()
 	}
 
@@ -256,6 +257,7 @@ func (t *task[T]) Execute(ctx context.Context) SilentTask {
 func (t *task[T]) ExecuteSync(ctx context.Context) SilentTask {
 	ok := t.doRun(ctx)
 	if !ok {
+		// Task already executed
 		t.Wait()
 	}
 
