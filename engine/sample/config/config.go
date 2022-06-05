@@ -8,4 +8,6 @@ var Engine = &CostEngine{
 
 type CostEngine struct {
 	core.Engine
+	// Add common utilities like logger, statsD, UCM client, etc.
+	// for all component codes to share.
 }

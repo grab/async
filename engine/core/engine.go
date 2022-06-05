@@ -106,6 +106,9 @@ func (e Engine) Execute(ctx context.Context, planName string, plan any) error {
 			continue
 		}
 
+		// Compute() will create and assign all tasks into plan so that
+		// when we call Execute() on any tasks, we won't get nil panic
+		// due to task fields not yet initialized.
 		tasks = append(tasks, c.Compute(plan))
 	}
 
