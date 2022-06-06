@@ -1,4 +1,4 @@
-package service
+package scaffolding
 
 import (
 	"testing"
@@ -8,9 +8,9 @@ import (
 )
 
 func TestConcretePlan_IsAnalyzed(t *testing.T) {
-	assert.True(t, config.Engine.IsAnalyzed(&ConcretePlan{}))
+	assert.True(t, config.Engine.IsAnalyzed(&ParallelPlan{}))
 }
 
 func TestConcretePlan_IsExecutable(t *testing.T) {
-	assert.Nil(t, config.Engine.IsPlanExecutable(&ConcretePlan{}))
+	assert.Nil(t, config.Engine.IsPlanExecutable(&ParallelPlan{}))
 }

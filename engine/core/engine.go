@@ -118,6 +118,11 @@ func (e Engine) doExecuteSync(ctx context.Context, p plan, computers []string) e
 
 		task := c.Compute(p)
 		if err := task.ExecuteSync(ctx).Error(); err != nil {
+			// Execution was intentionally ended by clients
+			if err == ErrPlanExecutionEndingEarly {
+				return nil
+			}
+
 			return err
 		}
 	}
@@ -151,5 +156,14 @@ func (e Engine) doExecuteAsync(ctx context.Context, p plan, computers []string) 
 		)
 	}
 
-	return g.Wait()
+	if err := g.Wait() ; err != nil {
+		// Execution was intentionally ended by clients
+		if err == ErrPlanExecutionEndingEarly {
+			return nil
+		}
+
+		return err
+	}
+
+	return nil
 }

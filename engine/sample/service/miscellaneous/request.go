@@ -1,4 +1,4 @@
-package service
+package miscellaneous
 
 type CostRequest struct {
 	PointA string

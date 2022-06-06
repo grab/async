@@ -1,4 +1,4 @@
-package service
+package scaffolding
 
 import (
 	"context"
@@ -12,22 +12,22 @@ import (
 var planName string
 
 func init() {
-	// fmt.Println("ConcretePlan")
-	planName = config.Engine.AnalyzePlan(&ConcretePlan{})
+	// fmt.Println("ParallelPlan")
+	planName = config.Engine.AnalyzePlan(&ParallelPlan{})
 }
 
-func (c *ConcretePlan) SetCostConfigs(o costconfigs.CostConfigs) {
+func (c *ParallelPlan) SetCostConfigs(o costconfigs.CostConfigs) {
 	c.CostConfigs = o
 }
 
-func (c *ConcretePlan) SetTravelPlan(o travelplan.TravelPlan) {
+func (c *ParallelPlan) SetTravelPlan(o travelplan.TravelPlan) {
 	c.TravelPlan = o
 }
 
-func (c *ConcretePlan) SetTravelCost(o travelcost.TravelCost) {
+func (c *ParallelPlan) SetTravelCost(o travelcost.TravelCost) {
 	c.TravelCost = o
 }
 
-func (c *ConcretePlan) Execute(ctx context.Context) error {
+func (c *ParallelPlan) Execute(ctx context.Context) error {
 	return config.Engine.Execute(ctx, planName, c)
 }
