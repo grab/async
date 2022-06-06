@@ -29,5 +29,9 @@ func (c *ParallelPlan) SetTravelCost(o travelcost.TravelCost) {
 }
 
 func (c *ParallelPlan) Execute(ctx context.Context) error {
-	return config.Engine.Execute(ctx, planName, c)
+	return config.Engine.Execute(ctx, nil, planName, c)
+}
+
+func (c *ParallelPlan) ExecuteWithin(ctx context.Context, masterPlan any) error {
+	return config.Engine.Execute(ctx, masterPlan, planName, c)
 }

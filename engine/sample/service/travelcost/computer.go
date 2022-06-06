@@ -22,7 +22,7 @@ func (c computer) Compute(p any) async.SilentTask {
 
 	task := async.NewTask(
 		func(ctx context.Context) (float64, error) {
-			return c.doCalculation(casted), nil
+			return c.calculateTravelCost(casted), nil
 		},
 	)
 

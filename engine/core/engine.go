@@ -11,14 +11,16 @@ import (
 )
 
 type Engine struct {
-	computers map[string]computer
-	plans     map[string][]string
+	computers     map[string]computer
+	syncComputers map[string]syncComputer
+	plans         map[string][]string
 }
 
 func NewEngine() Engine {
 	return Engine{
-		computers: make(map[string]computer),
-		plans:     make(map[string][]string),
+		computers:     make(map[string]computer),
+		syncComputers: make(map[string]syncComputer),
+		plans:         make(map[string][]string),
 	}
 }
 
@@ -26,19 +28,30 @@ func (e Engine) RegisterComputer(v any, c computer) {
 	e.computers[e.extractFullNameFromValue(v)] = c
 }
 
+func (e Engine) RegisterSyncComputer(v any, c syncComputer) {
+	e.syncComputers[e.extractFullNameFromValue(v)] = c
+}
+
 func (e Engine) IsRegistered(v any) bool {
-	_, ok := e.computers[e.extractFullNameFromValue(v)]
+	fullName := e.extractFullNameFromValue(v)
+
+	_, ok := e.computers[fullName]
+	if ok {
+		return true
+	}
+
+	_, ok = e.syncComputers[fullName]
 	return ok
 }
 
 func (e Engine) extractFullNameFromValue(v any) string {
 	if reflect.ValueOf(v).Kind() == reflect.Pointer {
 		t := reflect.ValueOf(v).Elem().Type()
-		return t.PkgPath() + "/" + t.Name()
+		return e.extractFullNameFromType(t)
 	}
 
 	t := reflect.TypeOf(v)
-	return t.PkgPath() + "/" + t.Name()
+	return e.extractFullNameFromType(t)
 }
 
 func (e Engine) extractFullNameFromType(t reflect.Type) string {
@@ -58,8 +71,8 @@ func (e Engine) AnalyzePlan(p plan) string {
 
 	computers := make([]string, val.NumField())
 	for i := 0; i < val.NumField(); i++ {
-		computerOutputName := e.extractFullNameFromType(val.Type().Field(i).Type)
-		computers[i] = computerOutputName
+		computerID := e.extractFullNameFromType(val.Type().Field(i).Type)
+		computers[i] = computerID
 	}
 
 	planName := e.extractFullNameFromValue(p)
@@ -76,7 +89,7 @@ func (e Engine) IsPlanExecutable(p plan) (err error) {
 		panic(ErrAnalyzePlanNotDone)
 	}
 
-	for _, computerOutputName := range computers {
+	for _, computerID := range computers {
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
@@ -86,7 +99,7 @@ func (e Engine) IsPlanExecutable(p plan) (err error) {
 			}()
 
 			// If plan is not executable, 1 of the computer will panic
-			c, ok := e.computers[computerOutputName]
+			c, ok := e.computers[computerID]
 			if ok {
 				c.Compute(p)
 			}
@@ -96,33 +109,64 @@ func (e Engine) IsPlanExecutable(p plan) (err error) {
 	return
 }
 
-func (e Engine) Execute(ctx context.Context, planName string, p plan) error {
+func (e Engine) Execute(ctx context.Context, masterPlan any, planName string, p plan) error {
+	if pre, ok := p.(prePlan); ok {
+		if err := pre.PreExecute(ctx, masterPlan); err != nil {
+			return e.swallowErrPlanExecutionEndingEarly(err)
+		}
+	}
+
+	if err := e.doExecute(ctx, planName, p); err != nil {
+		return e.swallowErrPlanExecutionEndingEarly(err)
+	}
+
+	if post, ok := p.(postPlan); ok {
+		if err := post.PostExecute(ctx, masterPlan); err != nil {
+			return e.swallowErrPlanExecutionEndingEarly(err)
+		}
+	}
+
+	return nil
+}
+
+func (e Engine) swallowErrPlanExecutionEndingEarly(err error) error {
+	// Execution was intentionally ended by clients
+	if err == ErrPlanExecutionEndingEarly {
+		return nil
+	}
+
+	return err
+}
+
+func (e Engine) doExecute(ctx context.Context, planName string, p plan) error {
 	computers, ok := e.plans[planName]
 	if !ok {
 		panic(ErrAnalyzePlanNotDone)
 	}
 
 	if p.IsSequential() {
-		return e.doExecuteSync(ctx, p, computers)
+		if err := e.doExecuteSync(ctx, p, computers); err != nil {
+			return err
+		}
+
+		return nil
 	}
 
-	return e.doExecuteAsync(ctx, p, computers)
+	if err := e.doExecuteAsync(ctx, p, computers); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (e Engine) doExecuteSync(ctx context.Context, p plan, computers []string) error {
-	for _, computerOutputName := range computers {
-		c, ok := e.computers[computerOutputName]
+	for _, computerID := range computers {
+		c, ok := e.syncComputers[computerID]
 		if !ok {
 			continue
 		}
 
-		task := c.Compute(p)
-		if err := task.ExecuteSync(ctx).Error(); err != nil {
-			// Execution was intentionally ended by clients
-			if err == ErrPlanExecutionEndingEarly {
-				return nil
-			}
-
+		if err := c.Compute(ctx, p); err != nil {
 			return err
 		}
 	}
@@ -132,8 +176,8 @@ func (e Engine) doExecuteSync(ctx context.Context, p plan, computers []string) e
 
 func (e Engine) doExecuteAsync(ctx context.Context, p plan, computers []string) error {
 	tasks := make([]async.SilentTask, 0, len(computers))
-	for _, computerOutputName := range computers {
-		c, ok := e.computers[computerOutputName]
+	for _, computerID := range computers {
+		c, ok := e.computers[computerID]
 		if !ok {
 			continue
 		}
@@ -156,14 +200,5 @@ func (e Engine) doExecuteAsync(ctx context.Context, p plan, computers []string) 
 		)
 	}
 
-	if err := g.Wait() ; err != nil {
-		// Execution was intentionally ended by clients
-		if err == ErrPlanExecutionEndingEarly {
-			return nil
-		}
-
-		return err
-	}
-
-	return nil
+	return g.Wait()
 }
