@@ -6,13 +6,13 @@ import (
 
 	"github.com/grab/async/engine/sample/server"
 	"github.com/grab/async/engine/sample/service/miscellaneous"
-	"github.com/grab/async/engine/sample/service/scaffolding"
+	"github.com/grab/async/engine/sample/service/scaffolding/parallel"
 )
 
 func main() {
 	server.Serve()
 
-	p := scaffolding.NewPlan(
+	p := parallel.NewPlan(
 		miscellaneous.CostRequest{
 			PointA: "Clementi",
 			PointB: "Changi Airport",
@@ -24,4 +24,5 @@ func main() {
 	}
 
 	fmt.Println(p.GetTravelCost())
+	fmt.Println(p.GetTotalCost())
 }

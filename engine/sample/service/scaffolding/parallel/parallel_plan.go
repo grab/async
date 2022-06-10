@@ -1,11 +1,9 @@
-package scaffolding
+package parallel
 
 import (
-	"context"
-	"fmt"
-
 	"github.com/grab/async/engine/sample/service/costconfigs"
 	"github.com/grab/async/engine/sample/service/miscellaneous"
+	"github.com/grab/async/engine/sample/service/scaffolding/sequential"
 	"github.com/grab/async/engine/sample/service/travelcost"
 	"github.com/grab/async/engine/sample/service/travelplan"
 )
@@ -15,6 +13,7 @@ type ParallelPlan struct {
 	costconfigs.CostConfigs
 	travelplan.TravelPlan
 	travelcost.TravelCost
+	sequential.SequentialPlan
 }
 
 func NewPlan(r miscellaneous.CostRequest) *ParallelPlan {
@@ -23,16 +22,6 @@ func NewPlan(r miscellaneous.CostRequest) *ParallelPlan {
 	}
 }
 
-func (c *ParallelPlan) IsSequential() bool {
+func (p *ParallelPlan) IsSequential() bool {
 	return false
-}
-
-func (c *ParallelPlan) PreExecute(ctx context.Context, masterPlan any) error {
-	fmt.Println("Before executing parallel plan")
-	return nil
-}
-
-func (c *ParallelPlan) PostExecute(ctx context.Context, masterPlan any) error {
-	fmt.Println("After executing parallel plan")
-	return nil
 }
