@@ -11,9 +11,9 @@ import (
 // Computers with external dependencies still has to register itself with the
 // engine using init() so that we can perform validations on plans
 func init() {
-	// fmt.Println("costconfigs")
+	// config.Print("costconfigs")
 	config.Engine.RegisterComputer(CostConfigs{}, computer{})
-	// fmt.Println(config.Engine)
+	// config.Print(config.Engine)
 }
 
 type computer struct {
@@ -30,9 +30,9 @@ func InitComputer(fetcher dummy.CostConfigsFetcher) {
 		fetcher: fetcher,
 	}
 
-	// fmt.Println("costconfigs")
+	// config.Print("costconfigs")
 	config.Engine.RegisterComputer(CostConfigs{}, c)
-	// fmt.Println(config.Engine)
+	// config.Print(config.Engine)
 }
 
 func (c computer) Compute(p any) async.SilentTask {

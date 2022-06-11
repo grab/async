@@ -12,7 +12,7 @@ import (
 var planName string
 
 func init() {
-	// fmt.Println("ParallelPlan")
+	// config.Print("ParallelPlan")
 	planName = config.Engine.AnalyzePlan(&ParallelPlan{})
 }
 

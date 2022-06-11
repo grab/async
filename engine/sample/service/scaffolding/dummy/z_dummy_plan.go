@@ -7,7 +7,7 @@ import (
 var planName string
 
 func init() {
-	// fmt.Println("DummyPlan")
+	// config.Print("DummyPlan")
 	planName = config.Engine.AnalyzePlan(&DummyPlan{})
 }
 

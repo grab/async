@@ -1,8 +1,6 @@
 package sequential
 
-import (
-	"fmt"
-)
+import "github.com/grab/async/engine/sample/config"
 
 type pre interface {
 	GetTravelCost() float64
@@ -12,7 +10,7 @@ type pre interface {
 type preHook struct{}
 
 func (preHook) PreExecute(p any) error {
-	fmt.Println("Before executing sequential plan")
+	config.Print("Before executing sequential plan")
 	casted := p.(pre)
 
 	casted.SetTotalCost(casted.GetTravelCost())

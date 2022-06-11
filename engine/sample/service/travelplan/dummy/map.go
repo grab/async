@@ -1,8 +1,7 @@
 package dummy
 
 import (
-	"fmt"
-
+	"github.com/grab/async/engine/sample/config"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -14,7 +13,7 @@ type TravelPlan struct {
 type MapService struct{}
 
 func (MapService) BuildTravelPlan(pointA, pointB string) (TravelPlan, error) {
-	fmt.Printf("Building travel plan from %s to %s using real map\n", pointA, pointB)
+	config.Printf("Building travel plan from %s to %s using real map\n", pointA, pointB)
 	return TravelPlan{
 		Distance: 2,
 		Duration: 3,

@@ -1,6 +1,6 @@
 package sequential
 
-import "fmt"
+import "github.com/grab/async/engine/sample/config"
 
 type post interface {
 	GetTotalCost() float64
@@ -9,10 +9,10 @@ type post interface {
 type postHook struct{}
 
 func (postHook) PostExecute(p any) error {
-	fmt.Println("After executing sequential plan")
+	config.Print("After executing sequential plan")
 	casted := p.(post)
 
-	fmt.Println("Calculated total cost:", casted.GetTotalCost())
+	config.Print("Calculated total cost:", casted.GetTotalCost())
 
 	return nil
 }
@@ -20,7 +20,7 @@ func (postHook) PostExecute(p any) error {
 type anotherPostHook struct{}
 
 func (anotherPostHook) PostExecute(p any) error {
-	fmt.Println("After sequential plan 2nd hook")
+	config.Print("After sequential plan 2nd hook")
 
 	return nil
 }

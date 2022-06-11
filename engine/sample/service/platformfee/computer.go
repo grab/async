@@ -10,9 +10,9 @@ import (
 // Computers without any external dependencies can register itself directly
 // with the engine using init()
 func init() {
-	// fmt.Println("platformfee")
+	// config.Print("platformfee")
 	config.Engine.RegisterComputer(PlatformFee{}, computer{})
-	// fmt.Println(config.Engine)
+	// config.Print(config.Engine)
 }
 
 type computer struct{}

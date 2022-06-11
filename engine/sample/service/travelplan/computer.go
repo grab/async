@@ -11,9 +11,9 @@ import (
 // Computers with external dependencies still has to register itself with the
 // engine using init() so that we can perform validations on plans
 func init() {
-	// fmt.Println("travelplan")
+	// config.Print("travelplan")
 	config.Engine.RegisterComputer(TravelPlan{}, computer{})
-	// fmt.Println(config.Engine)
+	// config.Print(config.Engine)
 }
 
 type computer struct {
@@ -30,9 +30,9 @@ func InitComputer(mapService dummy.MapService) {
 		mapService: mapService,
 	}
 
-	// fmt.Println("travelplan")
+	// config.Print("travelplan")
 	config.Engine.RegisterComputer(TravelPlan{}, c)
-	// fmt.Println(config.Engine)
+	// config.Print(config.Engine)
 }
 
 func (c computer) Compute(p any) async.SilentTask {

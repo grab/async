@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"testing"
 
 	"github.com/grab/async/engine/sample/config"
 	"github.com/grab/async/engine/sample/server"
@@ -10,15 +11,7 @@ import (
 	"github.com/grab/async/engine/sample/service/scaffolding/sequential"
 )
 
-type customPostHook struct{}
-
-func (customPostHook) PostExecute(p any) error {
-	config.Print("After sequential plan custom hook")
-
-	return nil
-}
-
-func main() {
+func BenchmarkCustomPostHook_PostExecute(b *testing.B) {
 	server.Serve()
 
 	config.Engine.ConnectPostHook(&sequential.SequentialPlan{}, customPostHook{})
@@ -30,10 +23,11 @@ func main() {
 		},
 	)
 
-	if err := p.Execute(context.Background()); err != nil {
-		config.Print(err)
-	}
+	b.ResetTimer()
 
-	config.Print(p.GetTravelCost())
-	config.Print(p.GetTotalCost())
+	for i := 0; i < b.N; i++ {
+		if err := p.Execute(context.Background()); err != nil {
+			config.Print(err)
+		}
+	}
 }

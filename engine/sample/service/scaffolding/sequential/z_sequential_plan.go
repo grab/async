@@ -7,7 +7,7 @@ import (
 var planName string
 
 func init() {
-	// fmt.Println("SequentialPlan")
+	// config.Print("SequentialPlan")
 	planName = config.Engine.AnalyzePlan(&SequentialPlan{})
 }
 
