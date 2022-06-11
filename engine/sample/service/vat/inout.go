@@ -1,17 +1,17 @@
 package vat
 
 type plan interface {
-    input
-    output
+	input
+	output
 }
 
 type input interface {
-    GetVATPercent() float64
-    GetTotalCost() float64
+	GetVATPercent() float64
+	GetTotalCost() float64
 }
 
 type output interface {
-    SetTotalCost(float64)
+	SetTotalCost(float64)
 }
 
-type Amount struct {}
+type Amount struct{}

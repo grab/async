@@ -1,10 +1,16 @@
 package core
 
-import "context"
+import (
+	"context"
+)
 
 type plan interface {
-	Execute(ctx context.Context) error
 	IsSequential() bool
+}
+
+type masterPlan interface {
+	plan
+	Execute(ctx context.Context) error
 }
 
 type pre interface {

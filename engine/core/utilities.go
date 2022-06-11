@@ -3,24 +3,24 @@ package core
 import "reflect"
 
 func swallowErrPlanExecutionEndingEarly(err error) error {
-    // Execution was intentionally ended by clients
-    if err == ErrPlanExecutionEndingEarly {
-        return nil
-    }
+	// Execution was intentionally ended by clients
+	if err == ErrPlanExecutionEndingEarly {
+		return nil
+	}
 
-    return err
+	return err
 }
 
 func extractFullNameFromValue(v any) string {
-    if reflect.ValueOf(v).Kind() == reflect.Pointer {
-        t := reflect.ValueOf(v).Elem().Type()
-        return extractFullNameFromType(t)
-    }
+	if reflect.ValueOf(v).Kind() == reflect.Pointer {
+		t := reflect.ValueOf(v).Elem().Type()
+		return extractFullNameFromType(t)
+	}
 
-    t := reflect.TypeOf(v)
-    return extractFullNameFromType(t)
+	t := reflect.TypeOf(v)
+	return extractFullNameFromType(t)
 }
 
 func extractFullNameFromType(t reflect.Type) string {
-    return t.PkgPath() + "/" + t.Name()
+	return t.PkgPath() + "/" + t.Name()
 }

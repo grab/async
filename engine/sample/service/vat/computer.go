@@ -1,26 +1,31 @@
 package vat
 
 import (
-    "context"
+	"context"
 
-    "github.com/grab/async/engine/sample/config"
+	"github.com/grab/async/async"
+	"github.com/grab/async/engine/sample/config"
 )
 
 // Computers without any external dependencies can register itself directly
 // with the engine using init()
 func init() {
-    // fmt.Println("vat")
-    config.Engine.RegisterSyncComputer(Amount{}, computer{})
-    // fmt.Println(config.Engine)
+	// fmt.Println("vat")
+	config.Engine.RegisterComputer(Amount{}, computer{})
+	// fmt.Println(config.Engine)
 }
 
 type computer struct{}
 
-func (c computer) Compute(ctx context.Context, p any) error {
-    casted := p.(plan)
+func (c computer) Compute(p any) async.SilentTask {
+	casted := p.(plan)
 
-    c.addVATAmount(casted)
+	task := async.NewSilentTask(
+		func(ctx context.Context) error {
+			c.addVATAmount(casted)
+			return nil
+		},
+	)
 
-    return nil
+	return task
 }
-
