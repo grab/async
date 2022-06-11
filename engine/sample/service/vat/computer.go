@@ -1,4 +1,4 @@
-package travelcost
+package vat
 
 import (
 	"context"
@@ -10,8 +10,8 @@ import (
 // Computers without any external dependencies can register itself directly
 // with the engine using init()
 func init() {
-	// fmt.Println("travelcost")
-	config.Engine.RegisterComputer(TravelCost{}, computer{})
+	// fmt.Println("vat")
+	config.Engine.RegisterComputer(Amount{}, computer{})
 	// fmt.Println(config.Engine)
 }
 
@@ -20,15 +20,10 @@ type computer struct{}
 func (c computer) Compute(p any) async.SilentTask {
 	casted := p.(plan)
 
-	task := async.NewTask(
-		func(ctx context.Context) (float64, error) {
-			return c.calculateTravelCost(casted), nil
-		},
-	)
-
-	casted.SetTravelCost(
-		TravelCost{
-			task: task,
+	task := async.NewSilentTask(
+		func(ctx context.Context) error {
+			c.addVATAmount(casted)
+			return nil
 		},
 	)
 

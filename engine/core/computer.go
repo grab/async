@@ -1,6 +1,8 @@
 package core
 
-import "github.com/grab/async/async"
+import (
+	"github.com/grab/async/async"
+)
 
 type computer interface {
 	Compute(p any) async.SilentTask

@@ -31,3 +31,13 @@ func (r CostConfigs) GetCostPerMinute() float64 {
 	result, _ := r.task.Outcome()
 	return result.CostPerMinute
 }
+
+func (r CostConfigs) GetPlatformFee() float64 {
+	result, _ := r.task.Outcome()
+	return result.PlatformFee
+}
+
+func (r CostConfigs) GetVATPercent() float64 {
+	result, _ := r.task.Outcome()
+	return result.VATPercent
+}
