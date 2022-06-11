@@ -1,6 +1,9 @@
 package parallel
 
 import (
+	"context"
+
+	"github.com/grab/async/engine/sample/config"
 	"github.com/grab/async/engine/sample/service/costconfigs"
 	"github.com/grab/async/engine/sample/service/miscellaneous"
 	"github.com/grab/async/engine/sample/service/scaffolding/sequential"
@@ -24,4 +27,8 @@ func NewPlan(r miscellaneous.CostRequest) *ParallelPlan {
 
 func (p *ParallelPlan) IsSequential() bool {
 	return false
+}
+
+func (p *ParallelPlan) Execute(ctx context.Context) error {
+	return config.Engine.Execute(ctx, planName, p)
 }

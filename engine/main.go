@@ -18,7 +18,24 @@ func (customPostHook) PostExecute(p any) error {
 	return nil
 }
 
+type dummy struct {}
+
+func (dummy) Do() {
+	fmt.Println("hello")
+}
+
 func main() {
+	// method, ok := reflect.ValueOf(dummy{}).Type().MethodByName("Do")
+	// if ok {
+	// 	fmt.Println(method)
+	// }
+	//
+	// method.Func.Call([]reflect.Value{reflect.ValueOf(dummy{})})
+
+	testEngine()
+}
+
+func testEngine() {
 	server.Serve()
 
 	config.Engine.ConnectPostHook(&sequential.SequentialPlan{}, customPostHook{})

@@ -16,27 +16,38 @@ var (
 	postHookType = reflect.TypeOf((*post)(nil)).Elem()
 )
 
+type parsedComponent struct {
+	id string
+	setter reflect.Method
+}
+
 type analyzedPlan struct {
 	isSequential bool
-	componentIDs []string
+	components   []parsedComponent
 	preHooks     []pre
 	postHooks    []post
 }
 
 type Engine struct {
-	computers map[string]computer
-	plans     map[string]analyzedPlan
+	computers      map[string]computer
+	plans          map[string]analyzedPlan
+	noisyComputers map[string]noisyComputer
 }
 
 func NewEngine() Engine {
 	return Engine{
 		computers: make(map[string]computer),
 		plans:     make(map[string]analyzedPlan),
+		noisyComputers: make(map[string]noisyComputer),
 	}
 }
 
 func (e Engine) RegisterComputer(v any, c computer) {
 	e.computers[extractFullNameFromValue(v)] = c
+}
+
+func (e Engine) RegisterNoisyComputer(v any, c noisyComputer) {
+	e.noisyComputers[extractFullNameFromValue(v)] = c
 }
 
 func (e Engine) IsRegistered(v any) bool {
@@ -52,10 +63,13 @@ func (e Engine) AnalyzePlan(p plan) string {
 		val = val.Elem()
 	}
 
+	pType := reflect.ValueOf(p).Type()
+	fmt.Println(pType)
+
 	var preHooks []pre
 	var postHooks []post
 
-	componentIDs := make([]string, val.NumField())
+	components := make([]parsedComponent, val.NumField())
 	for i := 0; i < val.NumField(); i++ {
 		fieldType := val.Type().Field(i).Type
 
@@ -76,14 +90,22 @@ func (e Engine) AnalyzePlan(p plan) string {
 		}
 
 		componentID := extractFullNameFromType(fieldType)
-		componentIDs[i] = componentID
+
+		setter, ok := pType.MethodByName("Set" + extractShortName(componentID))
+		fmt.Println("Set" + extractShortName(componentID), ok)
+		fmt.Println(setter)
+
+		components[i] = parsedComponent{
+			id: componentID,
+			setter: setter,
+		}
 	}
 
 	planName := extractFullNameFromValue(p)
 
 	toUpdate := e.findExistingPlanOrCreate(planName)
 	toUpdate.isSequential = p.IsSequential()
-	toUpdate.componentIDs = componentIDs
+	toUpdate.components = components
 	toUpdate.preHooks = append(toUpdate.preHooks, preHooks...)
 	toUpdate.postHooks = append(toUpdate.postHooks, postHooks...)
 
@@ -102,7 +124,7 @@ func (e Engine) IsExecutable(p masterPlan) (err error) {
 	verifyFn = func(planName string) {
 		ap := e.findAnalyzedPlan(planName)
 
-		for _, componentID := range ap.componentIDs {
+		for _, component := range ap.components {
 			func() {
 				defer func() {
 					if r := recover(); r != nil {
@@ -112,12 +134,12 @@ func (e Engine) IsExecutable(p masterPlan) (err error) {
 				}()
 
 				// If plan is not executable, 1 of the computer will panic
-				if c, ok := e.computers[componentID]; ok {
+				if c, ok := e.computers[component.id]; ok {
 					c.Compute(p)
 				}
 
-				if _, ok := e.plans[componentID]; ok {
-					verifyFn(componentID)
+				if _, ok := e.plans[component.id]; ok {
+					verifyFn(component.id)
 				}
 			}()
 		}
@@ -165,10 +187,10 @@ func (e Engine) doExecute(ctx context.Context, planName string, p masterPlan, is
 
 	err := func() error {
 		if isSequential {
-			return e.doExecuteSync(ctx, p, ap.componentIDs)
+			return e.doExecuteSync(ctx, p, ap.components)
 		}
 
-		return e.doExecuteAsync(ctx, p, ap.componentIDs)
+		return e.doExecuteAsync(ctx, p, ap.components)
 	}()
 
 	if err != nil {
@@ -184,10 +206,9 @@ func (e Engine) doExecute(ctx context.Context, planName string, p masterPlan, is
 	return nil
 }
 
-func (e Engine) doExecuteSync(ctx context.Context, p masterPlan, componentIDs []string) error {
-	for _, componentID := range componentIDs {
-		c, ok := e.computers[componentID]
-		if ok {
+func (e Engine) doExecuteSync(ctx context.Context, p masterPlan, components []parsedComponent) error {
+	for _, component := range components {
+		if c, ok := e.computers[component.id]; ok {
 			task := c.Compute(p).Execute(ctx)
 			if err := task.Error(); err != nil {
 				return err
@@ -196,9 +217,23 @@ func (e Engine) doExecuteSync(ctx context.Context, p masterPlan, componentIDs []
 			continue
 		}
 
+		// if nc, ok := e.noisyComputers[componentID]; ok {
+		// 	task := async.NewTask(
+		// 		func(ctx context.Context) (any, error) {
+		// 			return nc.Do(ctx, p)
+		// 		},
+		// 	)
+		//
+		// 	if err := task.Execute(ctx).Error(); err != nil {
+		// 		return err
+		// 	}
+		//
+		// 	continue
+		// }
+
 		// Nested plan gets executed synchronously
-		if ap, ok := e.plans[componentID]; ok {
-			if err := e.doExecute(ctx, componentID, p, ap.isSequential); err != nil {
+		if ap, ok := e.plans[component.id]; ok {
+			if err := e.doExecute(ctx, component.id, p, ap.isSequential); err != nil {
 				return err
 			}
 		}
@@ -207,16 +242,31 @@ func (e Engine) doExecuteSync(ctx context.Context, p masterPlan, componentIDs []
 	return nil
 }
 
-func (e Engine) doExecuteAsync(ctx context.Context, p masterPlan, componentIDs []string) error {
-	tasks := make([]async.SilentTask, 0, len(componentIDs))
-	for _, componentID := range componentIDs {
-		componentID := componentID
+func (e Engine) doExecuteAsync(ctx context.Context, p masterPlan, components []parsedComponent) error {
+	tasks := make([]async.SilentTask, 0, len(components))
+	for _, component := range components {
+		componentID := component.id
 		if c, ok := e.computers[componentID]; ok {
 			// Compute() will create and assign all tasks into plan so that
 			// when we call Execute() on any tasks, we won't get nil panic
 			// due to task fields not yet initialized.
 			task := c.Compute(p)
 			tasks = append(tasks, task)
+
+			continue
+		}
+
+		if nc, ok := e.noisyComputers[componentID]; ok {
+			task := async.NewTask(
+				func(ctx context.Context) (any, error) {
+					return nc.Do(ctx, p)
+				},
+			)
+
+			tasks = append(tasks, task)
+
+
+			component.setter.Func.Call([]reflect.Value{reflect.ValueOf(p), reflect.ValueOf(NewAsyncResult(task))})
 
 			continue
 		}
@@ -258,7 +308,7 @@ func (e Engine) findExistingPlanOrCreate(planName string) analyzedPlan {
 
 func (e Engine) findAnalyzedPlan(planName string) analyzedPlan {
 	ap, ok := e.plans[planName]
-	if !ok || len(ap.componentIDs) == 0 {
+	if !ok || len(ap.components) == 0 {
 		panic(ErrAnalyzePlanNotDone)
 	}
 
