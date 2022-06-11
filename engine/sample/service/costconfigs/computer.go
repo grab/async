@@ -3,7 +3,6 @@ package costconfigs
 import (
 	"context"
 
-	"github.com/grab/async/async"
 	"github.com/grab/async/engine/sample/config"
 	"github.com/grab/async/engine/sample/service/costconfigs/dummy"
 )
@@ -11,9 +10,9 @@ import (
 // Computers with external dependencies still has to register itself with the
 // engine using init() so that we can perform validations on plans
 func init() {
-	// config.Print("costconfigs")
+	// fmt.Println("costconfigs")
 	config.Engine.RegisterComputer(CostConfigs{}, computer{})
-	// config.Print(config.Engine)
+	// fmt.Println(config.Engine)
 }
 
 type computer struct {
@@ -30,25 +29,11 @@ func InitComputer(fetcher dummy.CostConfigsFetcher) {
 		fetcher: fetcher,
 	}
 
-	// config.Print("costconfigs")
+	// fmt.Println("costconfigs")
 	config.Engine.RegisterComputer(CostConfigs{}, c)
-	// config.Print(config.Engine)
+	// fmt.Println(config.Engine)
 }
 
-func (c computer) Compute(p any) async.SilentTask {
-	casted := p.(plan)
-
-	task := async.NewTask(
-		func(ctx context.Context) (dummy.MergedCostConfigs, error) {
-			return c.doFetch(), nil
-		},
-	)
-
-	casted.SetCostConfigs(
-		CostConfigs{
-			task: task,
-		},
-	)
-
-	return task
+func (c computer) Compute(ctx context.Context, p any) (any, error) {
+	return c.doFetch(), nil
 }

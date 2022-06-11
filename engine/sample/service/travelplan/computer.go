@@ -3,7 +3,6 @@ package travelplan
 import (
 	"context"
 
-	"github.com/grab/async/async"
 	"github.com/grab/async/engine/sample/config"
 	"github.com/grab/async/engine/sample/service/travelplan/dummy"
 )
@@ -35,25 +34,13 @@ func InitComputer(mapService dummy.MapService) {
 	// config.Print(config.Engine)
 }
 
-func (c computer) Compute(p any) async.SilentTask {
+func (c computer) Compute(ctx context.Context, p any) (any, error) {
 	casted := p.(plan)
 
-	task := async.NewTask(
-		func(ctx context.Context) (dummy.TravelPlan, error) {
-			travelPlan, err := c.buildTravelPlan(casted)
-			if err != nil {
-				return c.calculateStraightLineDistance(casted), nil
-			}
+	travelPlan, err := c.buildTravelPlan(casted)
+	if err != nil {
+		return c.calculateStraightLineDistance(casted), nil
+	}
 
-			return travelPlan, nil
-		},
-	)
-
-	casted.SetTravelPlan(
-		TravelPlan{
-			task: task,
-		},
-	)
-
-	return task
+	return travelPlan, nil
 }

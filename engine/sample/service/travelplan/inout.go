@@ -1,7 +1,7 @@
 package travelplan
 
 import (
-	"github.com/grab/async/async"
+	"github.com/grab/async/engine/core"
 	"github.com/grab/async/engine/sample/service/travelplan/dummy"
 )
 
@@ -16,19 +16,17 @@ type input interface {
 }
 
 type output interface {
-	SetTravelPlan(TravelPlan)
+	SetTravelPlan(core.AsyncResult)
 }
 
-type TravelPlan struct {
-	task async.Task[dummy.TravelPlan]
-}
+type TravelPlan core.AsyncResult
 
 func (p TravelPlan) GetTravelDistance() float64 {
-	result, _ := p.task.Outcome()
+	result := core.Extract[dummy.TravelPlan](p.Task)
 	return result.Distance
 }
 
 func (p TravelPlan) GetTravelDuration() float64 {
-	result, _ := p.task.Outcome()
+	result := core.Extract[dummy.TravelPlan](p.Task)
 	return result.Duration
 }

@@ -19,10 +19,10 @@ func (p *ParallelPlan) SetCostConfigs(o core.AsyncResult) {
 	p.CostConfigs = (costconfigs.CostConfigs)(o)
 }
 
-func (p *ParallelPlan) SetTravelPlan(o travelplan.TravelPlan) {
-	p.TravelPlan = o
+func (p *ParallelPlan) SetTravelPlan(o core.AsyncResult) {
+	p.TravelPlan = (travelplan.TravelPlan)(o)
 }
 
-func (p *ParallelPlan) SetTravelCost(o travelcost.TravelCost) {
-	p.TravelCost = o
+func (p *ParallelPlan) SetTravelCost(o core.AsyncResult) {
+	p.TravelCost = (travelcost.TravelCost)(o)
 }

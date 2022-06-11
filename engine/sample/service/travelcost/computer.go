@@ -3,7 +3,6 @@ package travelcost
 import (
 	"context"
 
-	"github.com/grab/async/async"
 	"github.com/grab/async/engine/sample/config"
 )
 
@@ -17,20 +16,8 @@ func init() {
 
 type computer struct{}
 
-func (c computer) Compute(p any) async.SilentTask {
+func (c computer) Compute(ctx context.Context, p any) (any, error) {
 	casted := p.(plan)
 
-	task := async.NewTask(
-		func(ctx context.Context) (float64, error) {
-			return c.calculateTravelCost(casted), nil
-		},
-	)
-
-	casted.SetTravelCost(
-		TravelCost{
-			task: task,
-		},
-	)
-
-	return task
+	return c.calculateTravelCost(casted), nil
 }

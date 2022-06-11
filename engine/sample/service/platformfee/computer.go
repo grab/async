@@ -3,7 +3,6 @@ package platformfee
 import (
 	"context"
 
-	"github.com/grab/async/async"
 	"github.com/grab/async/engine/sample/config"
 )
 
@@ -11,21 +10,16 @@ import (
 // with the engine using init()
 func init() {
 	// config.Print("platformfee")
-	config.Engine.RegisterComputer(PlatformFee{}, computer{})
+	config.Engine.RegisterSilentComputer(PlatformFee{}, computer{})
 	// config.Print(config.Engine)
 }
 
 type computer struct{}
 
-func (c computer) Compute(p any) async.SilentTask {
+func (c computer) Compute(ctx context.Context, p any) error {
 	casted := p.(plan)
 
-	task := async.NewSilentTask(
-		func(ctx context.Context) error {
-			c.addPlatformFee(casted)
-			return nil
-		},
-	)
+	c.addPlatformFee(casted)
 
-	return task
+	return nil
 }

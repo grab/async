@@ -18,12 +18,6 @@ func (customPostHook) PostExecute(p any) error {
 	return nil
 }
 
-type dummy struct {}
-
-func (dummy) Do() {
-	fmt.Println("hello")
-}
-
 func main() {
 	// method, ok := reflect.ValueOf(dummy{}).Type().MethodByName("Do")
 	// if ok {

@@ -17,8 +17,8 @@ var (
 )
 
 type parsedComponent struct {
-	id string
-	setter reflect.Method
+	id     string
+	setter *reflect.Method
 }
 
 type analyzedPlan struct {
@@ -29,16 +29,14 @@ type analyzedPlan struct {
 }
 
 type Engine struct {
-	computers      map[string]computer
-	plans          map[string]analyzedPlan
-	noisyComputers map[string]noisyComputer
+	computers map[string]computer
+	plans     map[string]analyzedPlan
 }
 
 func NewEngine() Engine {
 	return Engine{
 		computers: make(map[string]computer),
 		plans:     make(map[string]analyzedPlan),
-		noisyComputers: make(map[string]noisyComputer),
 	}
 }
 
@@ -46,8 +44,10 @@ func (e Engine) RegisterComputer(v any, c computer) {
 	e.computers[extractFullNameFromValue(v)] = c
 }
 
-func (e Engine) RegisterNoisyComputer(v any, c noisyComputer) {
-	e.noisyComputers[extractFullNameFromValue(v)] = c
+func (e Engine) RegisterSilentComputer(v any, sc silentComputer) {
+	e.computers[extractFullNameFromValue(v)] = bridgeComputer{
+		sc: sc,
+	}
 }
 
 func (e Engine) IsRegistered(v any) bool {
@@ -64,7 +64,7 @@ func (e Engine) AnalyzePlan(p plan) string {
 	}
 
 	pType := reflect.ValueOf(p).Type()
-	fmt.Println(pType)
+	// fmt.Println(pType)
 
 	var preHooks []pre
 	var postHooks []post
@@ -91,14 +91,24 @@ func (e Engine) AnalyzePlan(p plan) string {
 
 		componentID := extractFullNameFromType(fieldType)
 
-		setter, ok := pType.MethodByName("Set" + extractShortName(componentID))
-		fmt.Println("Set" + extractShortName(componentID), ok)
-		fmt.Println(setter)
+		component := func() parsedComponent {
+			setter, ok := pType.MethodByName("Set" + extractShortName(componentID))
+			if !ok {
+				return parsedComponent{
+					id: componentID,
+				}
+			}
 
-		components[i] = parsedComponent{
-			id: componentID,
-			setter: setter,
-		}
+			// fmt.Println("Set" + extractShortName(componentID), ok)
+			// fmt.Println(setter)
+
+			return parsedComponent{
+				id:     componentID,
+				setter: &setter,
+			}
+		}()
+
+		components[i] = component
 	}
 
 	planName := extractFullNameFromValue(p)
@@ -135,7 +145,7 @@ func (e Engine) IsExecutable(p masterPlan) (err error) {
 
 				// If plan is not executable, 1 of the computer will panic
 				if c, ok := e.computers[component.id]; ok {
-					c.Compute(p)
+					c.Compute(context.Background(), p)
 				}
 
 				if _, ok := e.plans[component.id]; ok {
@@ -209,27 +219,18 @@ func (e Engine) doExecute(ctx context.Context, planName string, p masterPlan, is
 func (e Engine) doExecuteSync(ctx context.Context, p masterPlan, components []parsedComponent) error {
 	for _, component := range components {
 		if c, ok := e.computers[component.id]; ok {
-			task := c.Compute(p).Execute(ctx)
-			if err := task.Error(); err != nil {
+			task := async.NewTask(
+				func(ctx context.Context) (any, error) {
+					return c.Compute(ctx, p)
+				},
+			)
+
+			if err := task.Execute(ctx).Error(); err != nil {
 				return err
 			}
 
 			continue
 		}
-
-		// if nc, ok := e.noisyComputers[componentID]; ok {
-		// 	task := async.NewTask(
-		// 		func(ctx context.Context) (any, error) {
-		// 			return nc.Do(ctx, p)
-		// 		},
-		// 	)
-		//
-		// 	if err := task.Execute(ctx).Error(); err != nil {
-		// 		return err
-		// 	}
-		//
-		// 	continue
-		// }
 
 		// Nested plan gets executed synchronously
 		if ap, ok := e.plans[component.id]; ok {
@@ -247,26 +248,15 @@ func (e Engine) doExecuteAsync(ctx context.Context, p masterPlan, components []p
 	for _, component := range components {
 		componentID := component.id
 		if c, ok := e.computers[componentID]; ok {
-			// Compute() will create and assign all tasks into plan so that
-			// when we call Execute() on any tasks, we won't get nil panic
-			// due to task fields not yet initialized.
-			task := c.Compute(p)
-			tasks = append(tasks, task)
-
-			continue
-		}
-
-		if nc, ok := e.noisyComputers[componentID]; ok {
 			task := async.NewTask(
 				func(ctx context.Context) (any, error) {
-					return nc.Do(ctx, p)
+					return c.Compute(ctx, p)
 				},
 			)
 
-			tasks = append(tasks, task)
-
-
 			component.setter.Func.Call([]reflect.Value{reflect.ValueOf(p), reflect.ValueOf(NewAsyncResult(task))})
+
+			tasks = append(tasks, task)
 
 			continue
 		}

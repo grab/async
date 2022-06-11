@@ -1,6 +1,8 @@
 package travelcost
 
-import "github.com/grab/async/async"
+import (
+	"github.com/grab/async/engine/core"
+)
 
 type plan interface {
 	input
@@ -16,14 +18,12 @@ type input interface {
 }
 
 type output interface {
-	SetTravelCost(TravelCost)
+	SetTravelCost(core.AsyncResult)
 }
 
-type TravelCost struct {
-	task async.Task[float64]
-}
+type TravelCost core.AsyncResult
 
 func (r TravelCost) GetTravelCost() float64 {
-	result, _ := r.task.Outcome()
+	result := core.Extract[float64](r.Task)
 	return result
 }
