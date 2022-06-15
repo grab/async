@@ -26,7 +26,7 @@ type AsyncResult struct {
 	Task async.Task[any]
 }
 
-func NewAsyncResult(t async.Task[any]) AsyncResult {
+func newAsyncResult(t async.Task[any]) AsyncResult {
 	return AsyncResult{
 		Task: t,
 	}

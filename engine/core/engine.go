@@ -4,21 +4,21 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"runtime/debug"
 
 	"github.com/grab/async/async"
 	"golang.org/x/sync/errgroup"
 )
 
 var (
-	planType     = reflect.TypeOf((*plan)(nil)).Elem()
-	preHookType  = reflect.TypeOf((*pre)(nil)).Elem()
-	postHookType = reflect.TypeOf((*post)(nil)).Elem()
+	planType        = reflect.TypeOf((*plan)(nil)).Elem()
+	preHookType     = reflect.TypeOf((*pre)(nil)).Elem()
+	postHookType    = reflect.TypeOf((*post)(nil)).Elem()
+	asyncResultType = reflect.TypeOf(AsyncResult{})
 )
 
 type parsedComponent struct {
 	id     string
-	setter *reflect.Method
+	setter reflect.Method
 }
 
 type analyzedPlan struct {
@@ -50,21 +50,32 @@ func (e Engine) RegisterSilentComputer(v any, sc silentComputer) {
 	}
 }
 
-func (e Engine) IsRegistered(v any) bool {
-	fullName := extractFullNameFromValue(v)
+func (e Engine) ConnectPreHook(p plan, hooks ...pre) {
+	planName := extractFullNameFromValue(p)
 
-	_, ok := e.computers[fullName]
-	return ok
+	toUpdate := e.findExistingPlanOrCreate(planName)
+	toUpdate.preHooks = append(toUpdate.preHooks, hooks...)
+
+	e.plans[planName] = toUpdate
+}
+
+func (e Engine) ConnectPostHook(p plan, hooks ...post) {
+	planName := extractFullNameFromValue(p)
+
+	toUpdate := e.findExistingPlanOrCreate(planName)
+	toUpdate.postHooks = append(toUpdate.postHooks, hooks...)
+
+	e.plans[planName] = toUpdate
 }
 
 func (e Engine) AnalyzePlan(p plan) string {
 	val := reflect.ValueOf(p)
-	if val.Kind() == reflect.Pointer {
-		val = val.Elem()
+	if val.Kind() != reflect.Pointer {
+		panic(ErrPlanMustBePointer)
 	}
 
+	val = val.Elem()
 	pType := reflect.ValueOf(p).Type()
-	// fmt.Println(pType)
 
 	var preHooks []pre
 	var postHooks []post
@@ -72,17 +83,24 @@ func (e Engine) AnalyzePlan(p plan) string {
 	components := make([]parsedComponent, val.NumField())
 	for i := 0; i < val.NumField(); i++ {
 		fieldType := val.Type().Field(i).Type
+		fieldPointerType := reflect.PointerTo(fieldType)
 
+		// Hook types might be embedded in a parent plan struct. Hence, we need to check if the type
+		// is a hook but not a plan so that we don't register a plan as a hook.
 		typeAndPointerTypeIsNotPlanType := !fieldType.Implements(planType) && !reflect.New(fieldType).Type().Implements(planType)
 
-		if typeAndPointerTypeIsNotPlanType && fieldType.Implements(preHookType) {
+		// Hooks might be implemented with value or pointer receivers.
+		isPreHookType := fieldType.Implements(preHookType) || fieldPointerType.Implements(preHookType)
+		isPostHookType := fieldType.Implements(postHookType) || fieldPointerType.Implements(postHookType)
+
+		if typeAndPointerTypeIsNotPlanType && isPreHookType {
 			preHook := reflect.New(fieldType).Interface().(pre)
 			preHooks = append(preHooks, preHook)
 
 			continue
 		}
 
-		if typeAndPointerTypeIsNotPlanType && fieldType.Implements(postHookType) {
+		if typeAndPointerTypeIsNotPlanType && isPostHookType {
 			postHook := reflect.New(fieldType).Interface().(post)
 			postHooks = append(postHooks, postHook)
 
@@ -92,19 +110,23 @@ func (e Engine) AnalyzePlan(p plan) string {
 		componentID := extractFullNameFromType(fieldType)
 
 		component := func() parsedComponent {
-			setter, ok := pType.MethodByName("Set" + extractShortName(componentID))
-			if !ok {
-				return parsedComponent{
-					id: componentID,
+			if fieldType.ConvertibleTo(asyncResultType) {
+				if p.IsSequential() {
+					panic(fmt.Errorf("sequential plan cannot contain AsyncResult field: %s", extractShortName(componentID)))
 				}
+
+				if setter, ok := pType.MethodByName("Set" + extractShortName(componentID)); ok {
+					return parsedComponent{
+						id:     componentID,
+						setter: setter,
+					}
+				}
+
+				panic(fmt.Errorf("parallel plan must have setter for AsyncResult field: %s", extractShortName(componentID)))
 			}
 
-			// fmt.Println("Set" + extractShortName(componentID), ok)
-			// fmt.Println(setter)
-
 			return parsedComponent{
-				id:     componentID,
-				setter: &setter,
+				id: componentID,
 			}
 		}()
 
@@ -122,60 +144,6 @@ func (e Engine) AnalyzePlan(p plan) string {
 	e.plans[planName] = toUpdate
 
 	return planName
-}
-
-func (e Engine) IsAnalyzed(p plan) bool {
-	_, ok := e.plans[extractFullNameFromValue(p)]
-	return ok
-}
-
-func (e Engine) IsExecutable(p masterPlan) (err error) {
-	var verifyFn func(planName string)
-	verifyFn = func(planName string) {
-		ap := e.findAnalyzedPlan(planName)
-
-		for _, component := range ap.components {
-			func() {
-				defer func() {
-					if r := recover(); r != nil {
-						err = fmt.Errorf("plan is not executable, %v", r)
-						fmt.Println(string(debug.Stack()))
-					}
-				}()
-
-				// If plan is not executable, 1 of the computer will panic
-				if c, ok := e.computers[component.id]; ok {
-					c.Compute(context.Background(), p)
-				}
-
-				if _, ok := e.plans[component.id]; ok {
-					verifyFn(component.id)
-				}
-			}()
-		}
-	}
-
-	verifyFn(extractFullNameFromValue(p))
-
-	return
-}
-
-func (e Engine) ConnectPreHook(p plan, hooks ...pre) {
-	planName := extractFullNameFromValue(p)
-
-	toUpdate := e.findExistingPlanOrCreate(planName)
-	toUpdate.preHooks = append(toUpdate.preHooks, hooks...)
-
-	e.plans[planName] = toUpdate
-}
-
-func (e Engine) ConnectPostHook(p plan, hooks ...post) {
-	planName := extractFullNameFromValue(p)
-
-	toUpdate := e.findExistingPlanOrCreate(planName)
-	toUpdate.postHooks = append(toUpdate.postHooks, hooks...)
-
-	e.plans[planName] = toUpdate
 }
 
 func (e Engine) Execute(ctx context.Context, planName string, p masterPlan) error {
@@ -220,12 +188,12 @@ func (e Engine) doExecuteSync(ctx context.Context, p masterPlan, components []pa
 	for _, component := range components {
 		if c, ok := e.computers[component.id]; ok {
 			task := async.NewTask(
-				func(ctx context.Context) (any, error) {
-					return c.Compute(ctx, p)
+				func(taskCtx context.Context) (any, error) {
+					return c.Compute(taskCtx, p)
 				},
 			)
 
-			if err := task.Execute(ctx).Error(); err != nil {
+			if err := task.ExecuteSync(ctx).Error(); err != nil {
 				return err
 			}
 
@@ -247,16 +215,18 @@ func (e Engine) doExecuteAsync(ctx context.Context, p masterPlan, components []p
 	tasks := make([]async.SilentTask, 0, len(components))
 	for _, component := range components {
 		componentID := component.id
+
 		if c, ok := e.computers[componentID]; ok {
 			task := async.NewTask(
-				func(ctx context.Context) (any, error) {
-					return c.Compute(ctx, p)
+				func(taskCtx context.Context) (any, error) {
+					return c.Compute(taskCtx, p)
 				},
 			)
 
-			component.setter.Func.Call([]reflect.Value{reflect.ValueOf(p), reflect.ValueOf(NewAsyncResult(task))})
-
 			tasks = append(tasks, task)
+
+			// Register AsyncResult in a parallel plan's field
+			component.setter.Func.Call([]reflect.Value{reflect.ValueOf(p), reflect.ValueOf(newAsyncResult(task))})
 
 			continue
 		}
@@ -264,8 +234,8 @@ func (e Engine) doExecuteAsync(ctx context.Context, p masterPlan, components []p
 		// Nested plan gets executed asynchronously by wrapping it inside a task
 		if ap, ok := e.plans[componentID]; ok {
 			task := async.NewSilentTask(
-				func(ctx context.Context) error {
-					return e.doExecute(ctx, componentID, p, ap.isSequential)
+				func(taskCtx context.Context) error {
+					return e.doExecute(taskCtx, componentID, p, ap.isSequential)
 				},
 			)
 
@@ -278,9 +248,7 @@ func (e Engine) doExecuteAsync(ctx context.Context, p masterPlan, components []p
 		t := task
 		g.Go(
 			func() error {
-				t.ExecuteSync(groupCtx)
-
-				return t.Error()
+				return t.ExecuteSync(groupCtx).Error()
 			},
 		)
 	}
@@ -299,7 +267,7 @@ func (e Engine) findExistingPlanOrCreate(planName string) analyzedPlan {
 func (e Engine) findAnalyzedPlan(planName string) analyzedPlan {
 	ap, ok := e.plans[planName]
 	if !ok || len(ap.components) == 0 {
-		panic(ErrAnalyzePlanNotDone)
+		panic(ErrPlanNotAnalyzed)
 	}
 
 	return ap

@@ -10,7 +10,7 @@ var Engine = &CostEngine{
 	Engine: core.NewEngine(),
 }
 
-var printDebugLog = false
+var printDebugLog = true
 
 func Print(values ...any) {
 	if printDebugLog {
