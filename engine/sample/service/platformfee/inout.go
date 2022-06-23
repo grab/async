@@ -1,5 +1,7 @@
 package platformfee
 
+import "github.com/grab/async/engine/core"
+
 type plan interface {
 	input
 	output
@@ -14,4 +16,4 @@ type output interface {
 	SetTotalCost(float64)
 }
 
-type PlatformFee struct{}
+type PlatformFee core.OutputKey

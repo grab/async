@@ -6,6 +6,8 @@ import (
 	"github.com/grab/async/async"
 )
 
+type OutputKey struct{}
+
 type computer interface {
 	Compute(ctx context.Context, p any) (any, error)
 }

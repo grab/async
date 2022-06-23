@@ -71,7 +71,7 @@ func (e Engine) ConnectPostHook(p plan, hooks ...post) {
 func (e Engine) AnalyzePlan(p plan) string {
 	val := reflect.ValueOf(p)
 	if val.Kind() != reflect.Pointer {
-		panic(ErrPlanMustBePointer)
+		panic(ErrPlanMustUsePointerReceiver)
 	}
 
 	val = val.Elem()

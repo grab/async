@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"runtime/debug"
 )
 
@@ -47,4 +48,13 @@ func (e Engine) IsExecutable(p masterPlan) (err error) {
 	verifyFn(extractFullNameFromValue(p))
 
 	return
+}
+
+func isValid(p plan) {
+	val := reflect.ValueOf(p)
+	if val.Kind() != reflect.Pointer {
+		panic(ErrPlanMustUsePointerReceiver)
+	}
+
+
 }
