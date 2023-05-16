@@ -181,3 +181,17 @@ func (t *task) ContinueWith(ctx context.Context, nextAction func(interface{}, er
 func (t *task) changeState(from, to State) bool {
 	return atomic.CompareAndSwapInt32(&t.state, int32(from), int32(to))
 }
+
+// -------------------------------- No-Op Task --------------------------------
+
+// Completed creates a completed task.
+func Completed() Task {
+	t := &task{
+		state:   int32(IsCompleted),
+		done:    make(signal, 1),
+		cancel:  make(signal, 1),
+		outcome: outcome{},
+	}
+	close(t.done)
+	return t
+}
