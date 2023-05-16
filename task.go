@@ -1,4 +1,5 @@
 // Copyright 2019 Grabtaxi Holdings PTE LTE (GRAB), All rights reserved.
+// Copyright 2021 Roman Atachiants
 // Use of this source code is governed by an MIT-style license that can be found in the LICENSE file
 
 package async
@@ -53,6 +54,7 @@ type Task interface {
 	State() State
 	Outcome() (interface{}, error)
 	ContinueWith(ctx context.Context, nextAction func(interface{}, error) (interface{}, error)) Task
+	Duration() time.Duration
 }
 
 // NewTask creates a new task.
@@ -178,4 +180,18 @@ func (t *task) ContinueWith(ctx context.Context, nextAction func(interface{}, er
 // Cancel cancels a running task.
 func (t *task) changeState(from, to State) bool {
 	return atomic.CompareAndSwapInt32(&t.state, int32(from), int32(to))
+}
+
+// -------------------------------- No-Op Task --------------------------------
+
+// Completed creates a completed task.
+func Completed() Task {
+	t := &task{
+		state:   int32(IsCompleted),
+		done:    make(signal, 1),
+		cancel:  make(signal, 1),
+		outcome: outcome{},
+	}
+	close(t.done)
+	return t
 }

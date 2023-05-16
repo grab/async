@@ -132,3 +132,11 @@ func TestTaskCancelTwice(t *testing.T) {
 	_, err := task.Outcome()
 	assert.Equal(t, errCancelled, err)
 }
+
+func TestCompleted(t *testing.T) {
+	task := Completed()
+	assert.Equal(t, IsCompleted, task.State())
+	v, err := task.Outcome()
+	assert.Nil(t, err)
+	assert.Nil(t, v)
+}
